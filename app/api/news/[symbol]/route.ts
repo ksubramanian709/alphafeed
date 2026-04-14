@@ -89,9 +89,10 @@ function deduplicate(items: NewsItem[]): NewsItem[] {
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { symbol: string } }
+  { params }: { params: Promise<{ symbol: string }> }
 ) {
-  const symbol = params.symbol.toUpperCase()
+  const { symbol: rawSymbol } = await params
+  const symbol = rawSymbol.toUpperCase()
 
   // Look up company name for better search queries
   const ticker = TICKERS.find(t => t.symbol === symbol)
