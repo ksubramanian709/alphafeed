@@ -1,4 +1,6 @@
+import MarketsOverview from './components/MarketsOverview'
 import QuoteSearch from './components/QuoteSearch'
+import NewsFeed from './components/NewsFeed'
 import CommodityDashboard from './components/CommodityDashboard'
 import MacroIndicators from './components/MacroIndicators'
 import Watchlist from './components/Watchlist'
@@ -7,6 +9,7 @@ import AgentChat from './components/AgentChat'
 export default function Home() {
   return (
     <main className="max-w-4xl mx-auto px-4 py-10 space-y-10">
+
       {/* Header */}
       <div className="border-b border-slate-800 pb-6">
         <h1 className="text-xl font-bold tracking-tight">
@@ -17,8 +20,19 @@ export default function Home() {
         </p>
       </div>
 
-      {/* Quote lookup */}
+      {/* Markets overview strip */}
+      <section>
+        <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">
+          Markets
+        </h2>
+        <MarketsOverview />
+      </section>
+
+      {/* Ticker search — navigates to /ticker/[symbol] */}
       <QuoteSearch />
+
+      {/* Market news */}
+      <NewsFeed limit={6} title="Market Headlines" />
 
       {/* Commodity dashboard */}
       <CommodityDashboard />
