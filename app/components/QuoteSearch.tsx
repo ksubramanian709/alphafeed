@@ -55,14 +55,23 @@ export default function QuoteSearch() {
   const inputRef     = useRef<HTMLInputElement>(null)
   const dropRef      = useRef<HTMLDivElement>(null)
 
-  // ---- fuzzy search ----
+  // ---- fuzzy search (called directly from browser — Yahoo doesn't block user IPs) ----
   const runSearch = useCallback(async (q: string) => {
     if (!q.trim()) { setSuggestions([]); setShowDrop(false); return }
     setSearching(true)
     try {
-      const res = await fetch(`${API}/v1/search?q=${encodeURIComponent(q)}`)
+      const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=7&newsCount=0&enableFuzzyQuery=true&enableCb=false`
+      const res = await fetch(url, { headers: { Accept: 'application/json' } })
       const json = await res.json()
-      const results: SearchResult[] = json.results ?? []
+      const quotes = json?.finance?.result ?? []
+      const results: SearchResult[] = quotes
+        .filter((r: any) => r.symbol)
+        .map((r: any) => ({
+          symbol:   r.symbol,
+          name:     r.longname ?? r.shortname ?? r.symbol,
+          exchange: r.exchDisp ?? r.exchange ?? '',
+          type:     r.typeDisp ?? r.quoteType ?? '',
+        }))
       setSuggestions(results)
       setShowDrop(results.length > 0)
       setActiveIdx(-1)
