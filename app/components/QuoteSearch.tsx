@@ -35,35 +35,40 @@ function fmt(n: number, decimals = 2) {
 }
 
 export default function QuoteSearch() {
-  const [input, setInput]           = useState('')
+  const [input, setInput]             = useState('')
   const [suggestions, setSuggestions] = useState<SearchResult[]>([])
-  const [showDrop, setShowDrop]     = useState(false)
-  const [searching, setSearching]   = useState(false)
+  const [showDrop, setShowDrop]       = useState(false)
+  const [searching, setSearching]     = useState(false)
+  const [activeIdx, setActiveIdx]     = useState(-1)
 
-  const [symbol, setSymbol]         = useState('')
-  const [quote, setQuote]           = useState<Quote | null>(null)
-  const [prevPrice, setPrevPrice]   = useState<number | null>(null)
-  const [source, setSource]         = useState('')
-  const [error, setError]           = useState('')
-  const [loading, setLoading]       = useState(false)
-  const [lastUpdate, setLastUpdate] = useState('')
-  const [flash, setFlash]           = useState<'up' | 'down' | null>(null)
+  const [symbol, setSymbol]           = useState('')
+  const [quote, setQuote]             = useState<Quote | null>(null)
+  const [prevPrice, setPrevPrice]     = useState<number | null>(null)
+  const [source, setSource]           = useState('')
+  const [error, setError]             = useState('')
+  const [loading, setLoading]         = useState(false)
+  const [lastUpdate, setLastUpdate]   = useState('')
+  const [flash, setFlash]             = useState<'up' | 'down' | null>(null)
 
   const intervalRef  = useRef<ReturnType<typeof setInterval> | null>(null)
   const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
+  const inputRef     = useRef<HTMLInputElement>(null)
+  const dropRef      = useRef<HTMLDivElement>(null)
 
-  // ---- fuzzy search as user types ----
+  // ---- fuzzy search ----
   const runSearch = useCallback(async (q: string) => {
     if (!q.trim()) { setSuggestions([]); setShowDrop(false); return }
     setSearching(true)
     try {
       const res = await fetch(`${API}/v1/search?q=${encodeURIComponent(q)}`)
       const json = await res.json()
-      setSuggestions(json.results ?? [])
-      setShowDrop(true)
+      const results: SearchResult[] = json.results ?? []
+      setSuggestions(results)
+      setShowDrop(results.length > 0)
+      setActiveIdx(-1)
     } catch {
       setSuggestions([])
+      setShowDrop(false)
     } finally {
       setSearching(false)
     }
@@ -71,19 +76,20 @@ export default function QuoteSearch() {
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => runSearch(input), 300)
+    debounceRef.current = setTimeout(() => runSearch(input), 350)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [input, runSearch])
 
   // Close dropdown on outside click
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setShowDrop(false)
-      }
+    function onMouseDown(e: MouseEvent) {
+      if (
+        dropRef.current && dropRef.current.contains(e.target as Node)
+      ) return  // click is inside dropdown — don't close
+      setShowDrop(false)
     }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
+    document.addEventListener('mousedown', onMouseDown)
+    return () => document.removeEventListener('mousedown', onMouseDown)
   }, [])
 
   // ---- quote fetching ----
@@ -126,35 +132,52 @@ export default function QuoteSearch() {
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
   }, [symbol])
 
-  function pickSymbol(sym: string) {
+  function pickSymbol(sym: string, name: string) {
+    // Set input to the full name so user sees what was selected
     setInput(sym)
     setShowDrop(false)
     setSuggestions([])
-    loadSymbol(sym)
-  }
-
-  function loadSymbol(sym: string) {
+    setActiveIdx(-1)
     if (intervalRef.current) clearInterval(intervalRef.current)
     setError('')
     setQuote(null)
     setPrevPrice(null)
     setSymbol(sym)
     fetchQuote(sym)
+    inputRef.current?.blur()
+  }
+
+  // Keyboard navigation
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (!showDrop || suggestions.length === 0) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActiveIdx(i => Math.min(i + 1, suggestions.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActiveIdx(i => Math.max(i - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      const idx = activeIdx >= 0 ? activeIdx : 0
+      if (suggestions[idx]) pickSymbol(suggestions[idx].symbol, suggestions[idx].name)
+    } else if (e.key === 'Escape') {
+      setShowDrop(false)
+    }
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setShowDrop(false)
-    // If there's a top suggestion, use its symbol; otherwise treat input as ticker
-    if (suggestions.length > 0) {
-      pickSymbol(suggestions[0].symbol)
+    if (showDrop && suggestions.length > 0) {
+      const idx = activeIdx >= 0 ? activeIdx : 0
+      pickSymbol(suggestions[idx].symbol, suggestions[idx].name)
     } else if (input.trim()) {
-      loadSymbol(input.trim().toUpperCase())
+      // Treat raw input as a ticker
+      pickSymbol(input.trim().toUpperCase(), input.trim().toUpperCase())
     }
   }
 
-  const cls  = quote ? priceClass(quote.change) : ''
-  const sign = quote && quote.change >= 0 ? '+' : ''
+  const cls     = quote ? priceClass(quote.change) : ''
+  const sign    = quote && quote.change >= 0 ? '+' : ''
   const flashBg = flash === 'up' ? 'bg-green-500/10' : flash === 'down' ? 'bg-red-500/10' : ''
 
   return (
@@ -163,13 +186,15 @@ export default function QuoteSearch() {
         Quote Lookup
       </h2>
 
-      {/* Search box + dropdown */}
-      <div ref={containerRef} className="relative mb-4">
+      {/* Search box */}
+      <div className="relative mb-4">
         <form onSubmit={handleSubmit} className="flex gap-2">
           <input
+            ref={inputRef}
             value={input}
             onChange={e => { setInput(e.target.value); setShowDrop(true) }}
-            onFocus={() => suggestions.length > 0 && setShowDrop(true)}
+            onFocus={() => { if (suggestions.length > 0) setShowDrop(true) }}
+            onKeyDown={onKeyDown}
             placeholder="Search by name or ticker — Apple, palantir, crude oil…"
             className="flex-1 bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm
                        placeholder-slate-600 focus:outline-none focus:border-slate-500"
@@ -184,27 +209,39 @@ export default function QuoteSearch() {
           </button>
         </form>
 
-        {/* Dropdown suggestions */}
-        {showDrop && (suggestions.length > 0 || searching) && (
-          <div className="absolute z-20 w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg
-                          shadow-xl overflow-hidden">
-            {searching && suggestions.length === 0 && (
+        {/* Dropdown */}
+        {showDrop && (
+          <div
+            ref={dropRef}
+            className="absolute z-30 w-full mt-1 bg-slate-900 border border-slate-700
+                       rounded-lg shadow-2xl overflow-hidden"
+          >
+            {searching && (
               <div className="px-3 py-2 text-xs text-slate-600">Searching…</div>
             )}
+            {!searching && suggestions.length === 0 && input.trim() && (
+              <div className="px-3 py-2 text-xs text-slate-600">No results</div>
+            )}
             {suggestions.map((r, i) => (
-              <button
+              <div
                 key={r.symbol + i}
-                onMouseDown={() => pickSymbol(r.symbol)}
-                className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center gap-3
-                           border-b border-slate-800 last:border-0"
+                onMouseDown={(e) => {
+                  e.preventDefault() // prevent input blur
+                  pickSymbol(r.symbol, r.name)
+                }}
+                className={`px-3 py-2.5 cursor-pointer flex items-center gap-3
+                            border-b border-slate-800 last:border-0 select-none
+                            ${i === activeIdx ? 'bg-slate-700' : 'hover:bg-slate-800'}`}
               >
-                <span className="font-mono text-sm font-semibold text-slate-200 w-20 shrink-0">
+                <span className="font-mono text-sm font-bold text-slate-100 w-24 shrink-0">
                   {r.symbol}
                 </span>
                 <span className="text-xs text-slate-400 flex-1 truncate">{r.name}</span>
-                <span className="text-xs text-slate-600 shrink-0">{r.exchange}</span>
-                <span className="text-xs text-slate-700 shrink-0 hidden sm:block">{r.type}</span>
-              </button>
+                <span className="text-xs text-slate-600 shrink-0 hidden sm:block">{r.exchange}</span>
+                <span className="text-xs bg-slate-800 text-slate-500 px-1.5 py-0.5 rounded shrink-0">
+                  {r.type}
+                </span>
+              </div>
             ))}
           </div>
         )}
@@ -232,7 +269,7 @@ export default function QuoteSearch() {
 
           {/* Price + day change */}
           <div className="flex items-end gap-4 mt-3">
-            <span className={`font-mono text-3xl font-bold ${cls} transition-colors duration-300`}>
+            <span className={`font-mono text-3xl font-bold ${cls}`}>
               {fmt(quote.price)}
             </span>
             <div className={`flex flex-col text-sm font-mono mb-0.5 ${cls}`}>
@@ -246,7 +283,7 @@ export default function QuoteSearch() {
             )}
           </div>
 
-          {/* OHLV row */}
+          {/* OHLV */}
           <div className="grid grid-cols-4 gap-2 mt-3 text-xs">
             {[
               ['Open', quote.price - quote.change],
