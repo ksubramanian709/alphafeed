@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #080c10;
+  color: #e2e8f0;
+}
+
+.price-up   { color: #22c55e; }
+.price-down { color: #ef4444; }
+.price-flat { color: #94a3b8; }
