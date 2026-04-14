@@ -19,7 +19,7 @@ function parseCookies(setCookieLines: string[]): string {
       if (k && !SKIP.has(k.toLowerCase())) map.set(k, v)
     }
   }
-  return [...map.entries()].map(([k, v]) => `${k}=${v}`).join('; ')
+  return Array.from(map.entries()).map(([k, v]) => `${k}=${v}`).join('; ')
 }
 
 async function refreshCrumb(): Promise<boolean> {
