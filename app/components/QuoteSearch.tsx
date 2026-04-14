@@ -1,6 +1,7 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import PriceChart from './PriceChart'
+import { searchTickers, type Ticker } from '../lib/tickers'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -17,12 +18,7 @@ interface Quote {
   assetType: string
 }
 
-interface SearchResult {
-  symbol: string
-  name: string
-  exchange: string
-  type: string
-}
+type SearchResult = Ticker
 
 function priceClass(change: number) {
   if (change > 0) return 'text-green-400'
@@ -38,7 +34,6 @@ export default function QuoteSearch() {
   const [input, setInput]             = useState('')
   const [suggestions, setSuggestions] = useState<SearchResult[]>([])
   const [showDrop, setShowDrop]       = useState(false)
-  const [searching, setSearching]     = useState(false)
   const [activeIdx, setActiveIdx]     = useState(-1)
 
   const [symbol, setSymbol]           = useState('')
@@ -51,33 +46,20 @@ export default function QuoteSearch() {
   const [flash, setFlash]             = useState<'up' | 'down' | null>(null)
 
   const intervalRef  = useRef<ReturnType<typeof setInterval> | null>(null)
-  const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef     = useRef<HTMLInputElement>(null)
   const dropRef      = useRef<HTMLDivElement>(null)
 
-  // ---- fuzzy search via Next.js API route (proxies Yahoo Finance, avoids CORS) ----
-  const runSearch = useCallback(async (q: string) => {
+  // ---- instant local fuzzy search — no network call needed ----
+  const runSearch = useCallback((q: string) => {
     if (!q.trim()) { setSuggestions([]); setShowDrop(false); return }
-    setSearching(true)
-    try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`)
-      const json = await res.json()
-      const results: SearchResult[] = json.results ?? []
-      setSuggestions(results)
-      setShowDrop(results.length > 0)
-      setActiveIdx(-1)
-    } catch {
-      setSuggestions([])
-      setShowDrop(false)
-    } finally {
-      setSearching(false)
-    }
+    const results = searchTickers(q)
+    setSuggestions(results)
+    setShowDrop(results.length > 0)
+    setActiveIdx(-1)
   }, [])
 
   useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => runSearch(input), 350)
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+    runSearch(input)
   }, [input, runSearch])
 
   // Close dropdown on outside click
@@ -216,10 +198,7 @@ export default function QuoteSearch() {
             className="absolute z-30 w-full mt-1 bg-slate-900 border border-slate-700
                        rounded-lg shadow-2xl overflow-hidden"
           >
-            {searching && (
-              <div className="px-3 py-2 text-xs text-slate-600">Searching…</div>
-            )}
-            {!searching && suggestions.length === 0 && input.trim() && (
+            {suggestions.length === 0 && input.trim() && (
               <div className="px-3 py-2 text-xs text-slate-600">No results</div>
             )}
             {suggestions.map((r, i) => (
