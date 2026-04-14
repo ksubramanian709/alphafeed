@@ -41,8 +41,10 @@ export default function NewsFeed({ symbol, limit = 8, title }: Props) {
   useEffect(() => {
     setLoading(true)
     setError('')
+    // Ticker news: use Vercel-side route for better RSS access + company-name search
+    // Market news: use backend (Railway)
     const url = symbol
-      ? `${API}/v1/news/${encodeURIComponent(symbol)}`
+      ? `/api/news/${encodeURIComponent(symbol)}`
       : `${API}/v1/news`
 
     fetch(url)

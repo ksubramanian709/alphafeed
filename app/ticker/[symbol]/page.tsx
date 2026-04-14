@@ -53,7 +53,6 @@ export default function TickerPage() {
   const symbol = (params.symbol as string).toUpperCase()
 
   const [quote, setQuote]     = useState<Quote | null>(null)
-  const [source, setSource]   = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
   const [lastUpdate, setLastUpdate] = useState('')
@@ -61,15 +60,29 @@ export default function TickerPage() {
   async function fetchQuote(isRefresh = false) {
     if (!isRefresh) setLoading(true)
     try {
-      const res  = await fetch(`${API}/v1/quote/${symbol}`)
-      const json = await res.json()
-      if (json.error || !json.data) {
-        setError(`No data found for "${symbol}"`)
-      } else {
-        setQuote(json.data)
-        setSource(json.source)
-        setLastUpdate(new Date().toLocaleTimeString())
+      const [quoteRes, statsRes] = await Promise.allSettled([
+        fetch(`${API}/v1/quote/${symbol}`),
+        fetch(`/api/stats/${encodeURIComponent(symbol)}`),
+      ])
+
+      let quoteData: Quote | null = null
+      if (quoteRes.status === 'fulfilled') {
+        const json = await quoteRes.value.json()
+        if (!json.error && json.data) quoteData = json.data
       }
+
+      if (!quoteData) { setError(`No data found for "${symbol}"`); return }
+
+      // Overlay market cap / 52wk range from stats route if better
+      if (statsRes.status === 'fulfilled') {
+        const stats = await statsRes.value.json()
+        if (stats.marketCap)        quoteData.marketCap        = stats.marketCap
+        if (stats.fiftyTwoWeekHigh) quoteData.fiftyTwoWeekHigh = stats.fiftyTwoWeekHigh
+        if (stats.fiftyTwoWeekLow)  quoteData.fiftyTwoWeekLow  = stats.fiftyTwoWeekLow
+      }
+
+      setQuote(quoteData)
+      setLastUpdate(new Date().toLocaleTimeString())
     } catch {
       setError('Failed to reach API')
     } finally {
@@ -161,7 +174,7 @@ export default function TickerPage() {
                 { label: 'Mkt Cap',    value: fmtLarge(quote.marketCap) },
                 { label: '52W High',   value: quote.fiftyTwoWeekHigh ? fmt(quote.fiftyTwoWeekHigh) : '—' },
                 { label: '52W Low',    value: quote.fiftyTwoWeekLow  ? fmt(quote.fiftyTwoWeekLow)  : '—' },
-                { label: 'Source',     value: source },
+                { label: 'Currency',   value: quote.currency ?? '—' },
               ].map(({ label, value }) => (
                 <div key={label} className="bg-slate-800 rounded-lg px-3 py-2">
                   <div className="text-xs text-slate-500 mb-0.5">{label}</div>
