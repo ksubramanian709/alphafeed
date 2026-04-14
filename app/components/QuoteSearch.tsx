@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import PriceChart from './PriceChart'
 
 const API = process.env.NEXT_PUBLIC_API_URL
@@ -17,6 +17,13 @@ interface Quote {
   assetType: string
 }
 
+interface SearchResult {
+  symbol: string
+  name: string
+  exchange: string
+  type: string
+}
+
 function priceClass(change: number) {
   if (change > 0) return 'text-green-400'
   if (change < 0) return 'text-red-400'
@@ -28,17 +35,58 @@ function fmt(n: number, decimals = 2) {
 }
 
 export default function QuoteSearch() {
-  const [input, setInput]       = useState('')
-  const [symbol, setSymbol]     = useState('')   // the currently loaded symbol
-  const [quote, setQuote]       = useState<Quote | null>(null)
-  const [prevPrice, setPrevPrice] = useState<number | null>(null)
-  const [source, setSource]     = useState('')
-  const [error, setError]       = useState('')
-  const [loading, setLoading]   = useState(false)
-  const [lastUpdate, setLastUpdate] = useState('')
-  const [flash, setFlash]       = useState<'up' | 'down' | null>(null)
-  const intervalRef             = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [input, setInput]           = useState('')
+  const [suggestions, setSuggestions] = useState<SearchResult[]>([])
+  const [showDrop, setShowDrop]     = useState(false)
+  const [searching, setSearching]   = useState(false)
 
+  const [symbol, setSymbol]         = useState('')
+  const [quote, setQuote]           = useState<Quote | null>(null)
+  const [prevPrice, setPrevPrice]   = useState<number | null>(null)
+  const [source, setSource]         = useState('')
+  const [error, setError]           = useState('')
+  const [loading, setLoading]       = useState(false)
+  const [lastUpdate, setLastUpdate] = useState('')
+  const [flash, setFlash]           = useState<'up' | 'down' | null>(null)
+
+  const intervalRef  = useRef<ReturnType<typeof setInterval> | null>(null)
+  const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // ---- fuzzy search as user types ----
+  const runSearch = useCallback(async (q: string) => {
+    if (!q.trim()) { setSuggestions([]); setShowDrop(false); return }
+    setSearching(true)
+    try {
+      const res = await fetch(`${API}/v1/search?q=${encodeURIComponent(q)}`)
+      const json = await res.json()
+      setSuggestions(json.results ?? [])
+      setShowDrop(true)
+    } catch {
+      setSuggestions([])
+    } finally {
+      setSearching(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => runSearch(input), 300)
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [input, runSearch])
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setShowDrop(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  // ---- quote fetching ----
   async function fetchQuote(sym: string, isRefresh = false) {
     if (!isRefresh) setLoading(true)
     try {
@@ -50,7 +98,6 @@ export default function QuoteSearch() {
       }
       setQuote(prev => {
         if (prev && isRefresh) {
-          // Flash animation on price change
           if (json.data.price > prev.price) setFlash('up')
           else if (json.data.price < prev.price) setFlash('down')
           setPrevPrice(prev.price)
@@ -67,40 +114,48 @@ export default function QuoteSearch() {
     }
   }
 
-  // Clear flash after animation
   useEffect(() => {
     if (!flash) return
     const t = setTimeout(() => setFlash(null), 800)
     return () => clearTimeout(t)
   }, [flash])
 
-  // Auto-refresh every 30s while a symbol is loaded
   useEffect(() => {
     if (!symbol) return
     intervalRef.current = setInterval(() => fetchQuote(symbol, true), 30_000)
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
   }, [symbol])
 
-  async function search(e: React.FormEvent) {
-    e.preventDefault()
-    if (!input.trim()) return
-    const sym = input.trim().toUpperCase()
+  function pickSymbol(sym: string) {
+    setInput(sym)
+    setShowDrop(false)
+    setSuggestions([])
+    loadSymbol(sym)
+  }
+
+  function loadSymbol(sym: string) {
     if (intervalRef.current) clearInterval(intervalRef.current)
     setError('')
     setQuote(null)
     setPrevPrice(null)
     setSymbol(sym)
-    await fetchQuote(sym)
+    fetchQuote(sym)
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setShowDrop(false)
+    // If there's a top suggestion, use its symbol; otherwise treat input as ticker
+    if (suggestions.length > 0) {
+      pickSymbol(suggestions[0].symbol)
+    } else if (input.trim()) {
+      loadSymbol(input.trim().toUpperCase())
+    }
   }
 
   const cls  = quote ? priceClass(quote.change) : ''
   const sign = quote && quote.change >= 0 ? '+' : ''
-
-  const flashBg = flash === 'up'
-    ? 'bg-green-500/10'
-    : flash === 'down'
-    ? 'bg-red-500/10'
-    : ''
+  const flashBg = flash === 'up' ? 'bg-green-500/10' : flash === 'down' ? 'bg-red-500/10' : ''
 
   return (
     <section>
@@ -108,25 +163,54 @@ export default function QuoteSearch() {
         Quote Lookup
       </h2>
 
-      <form onSubmit={search} className="flex gap-2 mb-4">
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          placeholder="AAPL  ·  CL=F  ·  GC=F  ·  ^VIX  ·  EUR=X…"
-          className="flex-1 bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm
-                     placeholder-slate-600 focus:outline-none focus:border-slate-500"
-        />
-        <button
-          type="submit"
-          disabled={loading}
-          className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium
-                     disabled:opacity-40 transition-colors"
-        >
-          {loading ? '…' : 'Search'}
-        </button>
-      </form>
+      {/* Search box + dropdown */}
+      <div ref={containerRef} className="relative mb-4">
+        <form onSubmit={handleSubmit} className="flex gap-2">
+          <input
+            value={input}
+            onChange={e => { setInput(e.target.value); setShowDrop(true) }}
+            onFocus={() => suggestions.length > 0 && setShowDrop(true)}
+            placeholder="Search by name or ticker — Apple, palantir, crude oil…"
+            className="flex-1 bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm
+                       placeholder-slate-600 focus:outline-none focus:border-slate-500"
+          />
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm font-medium
+                       disabled:opacity-40 transition-colors"
+          >
+            {loading ? '…' : 'Search'}
+          </button>
+        </form>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+        {/* Dropdown suggestions */}
+        {showDrop && (suggestions.length > 0 || searching) && (
+          <div className="absolute z-20 w-full mt-1 bg-slate-900 border border-slate-700 rounded-lg
+                          shadow-xl overflow-hidden">
+            {searching && suggestions.length === 0 && (
+              <div className="px-3 py-2 text-xs text-slate-600">Searching…</div>
+            )}
+            {suggestions.map((r, i) => (
+              <button
+                key={r.symbol + i}
+                onMouseDown={() => pickSymbol(r.symbol)}
+                className="w-full text-left px-3 py-2 hover:bg-slate-800 flex items-center gap-3
+                           border-b border-slate-800 last:border-0"
+              >
+                <span className="font-mono text-sm font-semibold text-slate-200 w-20 shrink-0">
+                  {r.symbol}
+                </span>
+                <span className="text-xs text-slate-400 flex-1 truncate">{r.name}</span>
+                <span className="text-xs text-slate-600 shrink-0">{r.exchange}</span>
+                <span className="text-xs text-slate-700 shrink-0 hidden sm:block">{r.type}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
 
       {quote && (
         <div className={`border border-slate-800 rounded-lg p-4 transition-colors duration-300 ${flashBg || 'bg-slate-900'}`}>
@@ -155,7 +239,6 @@ export default function QuoteSearch() {
               <span className="text-base font-semibold">{sign}{fmt(quote.change)}</span>
               <span className="text-xs">{sign}{fmt(quote.changePercent)}% today</span>
             </div>
-            {/* Previous price ghost if recently refreshed */}
             {prevPrice !== null && prevPrice !== quote.price && (
               <span className="text-xs text-slate-600 font-mono mb-1">
                 prev {fmt(prevPrice)}
@@ -183,7 +266,7 @@ export default function QuoteSearch() {
             ))}
           </div>
 
-          {/* Chart with 1m / 5m / 1h / 1D / 1W / 1M / 1Y */}
+          {/* Chart */}
           <PriceChart symbol={quote.symbol} currentPrice={quote.price} />
 
           <div className="mt-2 text-xs text-slate-700">
