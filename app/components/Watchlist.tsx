@@ -338,12 +338,12 @@ export default function Watchlist() {
                 {/* Drag handle */}
                 <div
                   className="flex flex-col gap-[3px] items-center justify-center cursor-grab active:cursor-grabbing
-                             opacity-0 group-hover:opacity-100 transition-opacity py-1 pr-1 select-none"
+                             text-slate-600 hover:text-slate-400 transition-colors py-1 pr-1 select-none"
                   title="Drag to reorder"
                 >
-                  <span className="w-3 h-px bg-slate-500 rounded" />
-                  <span className="w-3 h-px bg-slate-500 rounded" />
-                  <span className="w-3 h-px bg-slate-500 rounded" />
+                  <span className="w-2.5 h-0.5 bg-current rounded-full" />
+                  <span className="w-2.5 h-0.5 bg-current rounded-full" />
+                  <span className="w-2.5 h-0.5 bg-current rounded-full" />
                 </div>
 
                 <div className="min-w-0">
