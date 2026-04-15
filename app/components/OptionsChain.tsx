@@ -16,6 +16,10 @@ interface Contract {
   impliedVolatility: number
   inTheMoney: boolean
   expiration: number
+  delta: number
+  gamma: number
+  theta: number
+  vega: number
 }
 
 interface OptionsChain {
@@ -199,7 +203,19 @@ export default function OptionsChain({ symbol, underlyingPrice }: Props) {
 
       {/* Error */}
       {!loading && error && (
-        <div className="text-center py-8 text-sm text-slate-500">{error}</div>
+        <div className="text-center py-8 space-y-1">
+          <p className="text-sm text-slate-500">{error}</p>
+          {error.includes('TRADIER_API_KEY') && (
+            <p className="text-xs text-slate-600">
+              Get a free key at{' '}
+              <a href="https://developer.tradier.com" target="_blank" rel="noopener noreferrer"
+                className="text-emerald-500 hover:underline">
+                developer.tradier.com
+              </a>
+              , then set <code className="text-slate-400">TRADIER_API_KEY</code> on Railway.
+            </p>
+          )}
+        </div>
       )}
 
       {/* Chain tables */}
@@ -269,6 +285,8 @@ function ContractTable({ contracts, type, spotPrice }: TableProps) {
             <th className="text-right pb-2 px-2 font-normal">Ask</th>
             <th className="text-right pb-2 px-2 font-normal">Last</th>
             <th className="text-right pb-2 px-2 font-normal">IV%</th>
+            <th className="text-right pb-2 px-2 font-normal hidden sm:table-cell">Delta</th>
+            <th className="text-right pb-2 px-2 font-normal hidden sm:table-cell">Theta</th>
             <th className="text-right pb-2 px-2 font-normal">Vol</th>
             <th className="text-right pb-2 pl-2 font-normal">OI</th>
           </tr>
@@ -304,6 +322,12 @@ function ContractTable({ contracts, type, spotPrice }: TableProps) {
                   {c.impliedVolatility > 0
                     ? `${(c.impliedVolatility * 100).toFixed(1)}%`
                     : '—'}
+                </td>
+                <td className="py-1.5 px-2 text-right text-blue-400 hidden sm:table-cell">
+                  {c.delta !== 0 ? fmtNum(c.delta, 3) : '—'}
+                </td>
+                <td className="py-1.5 px-2 text-right text-orange-400 hidden sm:table-cell">
+                  {c.theta !== 0 ? fmtNum(c.theta, 3) : '—'}
                 </td>
                 <td className="py-1.5 px-2 text-right text-slate-400">
                   {fmtVol(c.volume)}
