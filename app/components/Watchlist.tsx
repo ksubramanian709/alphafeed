@@ -5,7 +5,8 @@ import { searchTickers, type Ticker } from '../lib/tickers'
 const API    = process.env.NEXT_PUBLIC_API_URL ?? ''
 const WS_URL = API.replace(/^http/, 'ws') + '/v1/stream/quotes'
 
-const DEFAULT_SYMBOLS = ['AAPL', '^GSPC', '^VIX', 'GC=F', 'CL=F']
+const DEFAULT_SYMBOLS  = ['AAPL', '^GSPC', '^VIX', 'GC=F', 'CL=F']
+const STORAGE_KEY      = 'alphafeed-watchlist'
 
 interface LiveQuote {
   symbol: string
@@ -21,7 +22,35 @@ interface LiveQuote {
   timestamp: string
 }
 
+interface TickerBriefing {
+  symbol: string
+  name: string | null
+  price: number
+  changePercent: number
+  sentiment: 'bullish' | 'bearish' | 'neutral'
+  summary: string
+  keyPoints: string[]
+}
+
+interface BriefingResponse {
+  briefings: TickerBriefing[]
+  generatedAt: string
+  error?: string
+}
+
 function fmt(n: number) { return n.toFixed(2) }
+
+function loadSavedSymbols(): string[] {
+  if (typeof window === 'undefined') return DEFAULT_SYMBOLS
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY)
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed
+    }
+  } catch { /* ignore */ }
+  return DEFAULT_SYMBOLS
+}
 
 export default function Watchlist() {
   const [quotes, setQuotes]       = useState<Record<string, LiveQuote>>({})
@@ -31,12 +60,30 @@ export default function Watchlist() {
   const [showDrop, setShowDrop]   = useState(false)
   const [activeIdx, setActiveIdx] = useState(-1)
   const [connected, setConnected] = useState(false)
+  const [briefing, setBriefing]   = useState<BriefingResponse | null>(null)
+  const [briefingLoading, setBriefingLoading] = useState(false)
 
-  const wsRef      = useRef<WebSocket | null>(null)
-  const inputRef   = useRef<HTMLInputElement>(null)
-  const dropRef    = useRef<HTMLDivElement>(null)
+  const wsRef    = useRef<WebSocket | null>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const dropRef  = useRef<HTMLDivElement>(null)
+  const hydrated = useRef(false)
 
-  // ── fuzzy search ──
+  // Hydrate from localStorage on first mount (client-only)
+  useEffect(() => {
+    if (!hydrated.current) {
+      hydrated.current = true
+      setSymbols(loadSavedSymbols())
+    }
+  }, [])
+
+  // Persist to localStorage whenever symbols change (after hydration)
+  useEffect(() => {
+    if (hydrated.current) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(symbols))
+    }
+  }, [symbols])
+
+  // Fuzzy search
   useEffect(() => {
     if (!input.trim()) { setSuggestions([]); setShowDrop(false); return }
     const results = searchTickers(input)
@@ -54,7 +101,7 @@ export default function Watchlist() {
     return () => document.removeEventListener('mousedown', onMouseDown)
   }, [])
 
-  // ── WebSocket ──
+  // WebSocket
   const subscribe = useCallback((syms: string[]) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return
     wsRef.current.send(JSON.stringify({ action: 'subscribe', symbols: syms }))
@@ -67,11 +114,9 @@ export default function Watchlist() {
 
   useEffect(() => {
     let reconnectTimer: ReturnType<typeof setTimeout>
-
     function connect() {
       const ws = new WebSocket(WS_URL)
       wsRef.current = ws
-
       ws.onopen = () => {
         setConnected(true)
         ws.send(JSON.stringify({ action: 'subscribe', symbols }))
@@ -90,7 +135,6 @@ export default function Watchlist() {
       }
       ws.onerror = () => ws.close()
     }
-
     connect()
     return () => { clearTimeout(reconnectTimer); wsRef.current?.close() }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -105,7 +149,7 @@ export default function Watchlist() {
     prevSymbols.current = symbols
   }, [symbols, subscribe, unsubscribe])
 
-  // ── add / remove ──
+  // Add / remove
   function pickSymbol(sym: string) {
     if (!sym || symbols.includes(sym)) { setInput(''); setShowDrop(false); return }
     setSymbols(prev => [...prev, sym])
@@ -117,6 +161,10 @@ export default function Watchlist() {
   function removeSymbol(sym: string) {
     setSymbols(prev => prev.filter(s => s !== sym))
     setQuotes(prev => { const n = { ...prev }; delete n[sym]; return n })
+    setBriefing(prev => prev
+      ? { ...prev, briefings: prev.briefings.filter(b => b.symbol !== sym) }
+      : null
+    )
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -136,6 +184,24 @@ export default function Watchlist() {
     }
   }
 
+  async function fetchBriefing() {
+    if (symbols.length === 0 || briefingLoading) return
+    setBriefingLoading(true)
+    try {
+      const res  = await fetch(`${API}/v1/agent/briefing`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbols }),
+      })
+      const data: BriefingResponse = await res.json()
+      setBriefing(data)
+    } catch {
+      setBriefing({ briefings: [], generatedAt: '', error: 'Failed to reach the API.' })
+    } finally {
+      setBriefingLoading(false)
+    }
+  }
+
   return (
     <section>
       {/* Header */}
@@ -143,13 +209,13 @@ export default function Watchlist() {
         <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500">
           Watchlist
         </h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-500 animate-pulse' : 'bg-slate-600'}`} />
           <span className="text-xs text-slate-600">{connected ? 'live' : 'connecting…'}</span>
         </div>
       </div>
 
-      {/* Add symbol input with fuzzy dropdown */}
+      {/* Add symbol input */}
       <div className="relative mb-4">
         <form onSubmit={handleSubmit} className="flex gap-2">
           <input
@@ -217,9 +283,9 @@ export default function Watchlist() {
             const dn   = q && q.change < 0
             const sign = q && q.change >= 0 ? '+' : ''
 
-            const priceColor  = up ? 'text-green-400' : dn ? 'text-red-400' : 'text-slate-400'
-            const badgeBg     = up ? 'bg-green-500/10 border-green-900/40' : dn ? 'bg-red-500/10 border-red-900/40' : 'bg-slate-800 border-slate-700'
-            const rowBg       = idx % 2 === 0 ? 'bg-slate-900' : 'bg-slate-900/60'
+            const priceColor = up ? 'text-green-400' : dn ? 'text-red-400' : 'text-slate-400'
+            const badgeBg    = up ? 'bg-green-500/10 border-green-900/40' : dn ? 'bg-red-500/10 border-red-900/40' : 'bg-slate-800 border-slate-700'
+            const rowBg      = idx % 2 === 0 ? 'bg-slate-900' : 'bg-slate-900/60'
 
             return (
               <div
@@ -227,7 +293,6 @@ export default function Watchlist() {
                 className={`grid grid-cols-[1fr_auto] items-center px-4 py-3 ${rowBg}
                             hover:bg-slate-800/60 transition-colors group border-b border-slate-800/50 last:border-0`}
               >
-                {/* Left: symbol + name */}
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-sm font-bold text-slate-100">{sym}</span>
@@ -240,20 +305,15 @@ export default function Watchlist() {
                   </div>
                 </div>
 
-                {/* Right: H/L bar + change badge + price */}
                 <div className="flex items-center gap-4 shrink-0">
-                  {/* H/L */}
                   {q ? (
                     <div className="hidden md:flex flex-col items-end w-24">
                       <div className="flex items-center gap-1 w-full">
-                        {/* Mini range bar */}
                         <span className="text-xs text-slate-700 font-mono">{fmt(q.low)}</span>
                         <div className="flex-1 h-1 bg-slate-700 rounded-full overflow-hidden mx-1">
                           <div
                             className={`h-full rounded-full ${up ? 'bg-green-500' : dn ? 'bg-red-500' : 'bg-slate-500'}`}
-                            style={{
-                              width: `${Math.min(100, Math.max(0, ((q.price - q.low) / (q.high - q.low || 1)) * 100))}%`
-                            }}
+                            style={{ width: `${Math.min(100, Math.max(0, ((q.price - q.low) / (q.high - q.low || 1)) * 100))}%` }}
                           />
                         </div>
                         <span className="text-xs text-slate-700 font-mono">{fmt(q.high)}</span>
@@ -261,8 +321,7 @@ export default function Watchlist() {
                     </div>
                   ) : <div className="hidden md:block w-24" />}
 
-                  {/* Change badge */}
-                  <div className={`w-20 text-right`}>
+                  <div className="w-20 text-right">
                     {q ? (
                       <span className={`inline-block text-xs font-mono font-semibold px-2 py-0.5 rounded border ${badgeBg} ${priceColor}`}>
                         {sign}{fmt(q.changePercent)}%
@@ -272,23 +331,17 @@ export default function Watchlist() {
                     )}
                   </div>
 
-                  {/* Price */}
                   <div className="w-24 text-right">
                     {q ? (
                       <>
-                        <div className={`font-mono font-bold text-base ${priceColor}`}>
-                          {fmt(q.price)}
-                        </div>
-                        <div className={`font-mono text-xs ${priceColor} opacity-70`}>
-                          {sign}{fmt(q.change)}
-                        </div>
+                        <div className={`font-mono font-bold text-base ${priceColor}`}>{fmt(q.price)}</div>
+                        <div className={`font-mono text-xs ${priceColor} opacity-70`}>{sign}{fmt(q.change)}</div>
                       </>
                     ) : (
                       <div className="font-mono text-slate-700 animate-pulse text-base">…</div>
                     )}
                   </div>
 
-                  {/* Remove */}
                   <button
                     onClick={() => removeSymbol(sym)}
                     title={`Remove ${sym}`}
@@ -301,6 +354,116 @@ export default function Watchlist() {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* Morning Briefing */}
+      {symbols.length > 0 && (
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+                Morning Briefing
+              </span>
+              {briefing?.generatedAt && !briefing.error && (
+                <span className="text-xs text-slate-700 ml-2">
+                  — {new Date(briefing.generatedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={fetchBriefing}
+              disabled={briefingLoading}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-slate-700
+                         hover:border-emerald-500/50 hover:text-emerald-400 text-slate-400
+                         disabled:opacity-40 transition-colors"
+            >
+              {briefingLoading ? (
+                <>
+                  <span className="w-3 h-3 border border-slate-500 border-t-slate-300 rounded-full animate-spin" />
+                  Analyzing…
+                </>
+              ) : (
+                <>
+                  <span>✦</span>
+                  {briefing ? 'Refresh' : 'Get Briefing'}
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Loading skeleton */}
+          {briefingLoading && !briefing && (
+            <div className="space-y-2">
+              {symbols.slice(0, 3).map(s => (
+                <div key={s} className="h-24 bg-slate-900 border border-slate-800 rounded-xl animate-pulse" />
+              ))}
+            </div>
+          )}
+
+          {/* Error */}
+          {briefing?.error && (
+            <p className="text-sm text-slate-500 text-center py-4">{briefing.error}</p>
+          )}
+
+          {/* Briefing cards */}
+          {briefing && !briefing.error && briefing.briefings.length > 0 && (
+            <div className="space-y-2">
+              {briefing.briefings.map(b => {
+                const sentimentColor = b.sentiment === 'bullish'
+                  ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                  : b.sentiment === 'bearish'
+                  ? 'text-red-400 bg-red-500/10 border-red-500/20'
+                  : 'text-slate-400 bg-slate-700/30 border-slate-600/30'
+                const changeColor = b.changePercent >= 0 ? 'text-green-400' : 'text-red-400'
+                const changeSign  = b.changePercent >= 0 ? '+' : ''
+
+                return (
+                  <div
+                    key={b.symbol}
+                    className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 space-y-2"
+                  >
+                    {/* Top row: symbol + price + sentiment */}
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-slate-100 text-sm">{b.symbol}</span>
+                        {b.price > 0 && (
+                          <span className={`font-mono text-xs ${changeColor}`}>
+                            {changeSign}{b.changePercent.toFixed(2)}%
+                          </span>
+                        )}
+                      </div>
+                      <span className={`text-[10px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-full border ${sentimentColor}`}>
+                        {b.sentiment}
+                      </span>
+                    </div>
+
+                    {/* Summary */}
+                    <p className="text-sm text-slate-300 leading-snug">{b.summary}</p>
+
+                    {/* Key points */}
+                    {b.keyPoints.length > 0 && (
+                      <ul className="space-y-0.5">
+                        {b.keyPoints.map((pt, i) => (
+                          <li key={i} className="flex gap-2 text-xs text-slate-500">
+                            <span className="text-slate-700 shrink-0">•</span>
+                            <span>{pt}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Empty state — before first briefing */}
+          {!briefing && !briefingLoading && (
+            <p className="text-xs text-slate-700 text-center py-3">
+              AI analysis of your watchlist — news, price action, and what matters today.
+            </p>
+          )}
         </div>
       )}
     </section>
