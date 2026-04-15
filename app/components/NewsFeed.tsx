@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -10,6 +11,7 @@ interface NewsItem {
   summary: string
   publishedAt: string | null
   sentiment: string
+  imageUrl: string | null
 }
 
 function sentimentColor(s: string) {
@@ -21,28 +23,30 @@ function sentimentColor(s: string) {
 function timeAgo(iso: string | null): string {
   if (!iso) return ''
   const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-  if (diff < 60)   return `${diff}s ago`
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  if (diff < 60)    return `${diff}s ago`
+  if (diff < 3600)  return `${Math.floor(diff / 60)}m ago`
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
   return `${Math.floor(diff / 86400)}d ago`
 }
 
+function isFavicon(url: string | null): boolean {
+  return !!url?.includes('favicons')
+}
+
 interface Props {
-  symbol?: string   // if provided, fetches ticker-specific news
+  symbol?: string
   limit?: number
   title?: string
 }
 
 export default function NewsFeed({ symbol, limit = 8, title }: Props) {
-  const [news, setNews]     = useState<NewsItem[]>([])
+  const [news, setNews]       = useState<NewsItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError]   = useState('')
+  const [error, setError]     = useState('')
 
   useEffect(() => {
     setLoading(true)
     setError('')
-    // Ticker news: use Vercel-side route for better RSS access + company-name search
-    // Market news: use backend (Railway)
     const url = symbol
       ? `/api/news/${encodeURIComponent(symbol)}`
       : `${API}/v1/news`
@@ -68,17 +72,14 @@ export default function NewsFeed({ symbol, limit = 8, title }: Props) {
       {loading && (
         <div className="space-y-2">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-14 bg-slate-900 border border-slate-800 rounded-lg animate-pulse" />
+            <div key={i} className="h-16 bg-slate-900 border border-slate-800 rounded-lg animate-pulse" />
           ))}
         </div>
       )}
 
       {error && !loading && (
         <div className="text-slate-600 text-sm bg-slate-900 border border-slate-800 rounded-lg p-4">
-          {error.includes('rate-limited') || error.includes('upgrade')
-            ? <>News requires an <span className="font-mono text-slate-500">ALPHA_VANTAGE_KEY</span> — get one free at alphavantage.co</>
-            : error
-          }
+          {error}
         </div>
       )}
 
@@ -94,14 +95,28 @@ export default function NewsFeed({ symbol, limit = 8, title }: Props) {
               href={item.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-start gap-3 px-4 py-3 bg-slate-900 hover:bg-slate-800/60
-                         transition-colors group block"
+              className="flex items-center gap-3 px-3 py-2.5 bg-slate-900 hover:bg-slate-800/60
+                         transition-colors group"
             >
+              {/* Thumbnail */}
+              <div className={`shrink-0 rounded overflow-hidden bg-slate-800
+                ${isFavicon(item.imageUrl) ? 'w-8 h-8' : 'w-16 h-12 sm:w-20 sm:h-14'}`}>
+                {item.imageUrl && (
+                  <img
+                    src={item.imageUrl}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                  />
+                )}
+              </div>
+
+              {/* Content */}
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-slate-200 group-hover:text-white leading-snug line-clamp-2 transition-colors">
                   {item.title}
                 </p>
-                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <span className="text-xs text-slate-600">{item.source}</span>
                   {item.publishedAt && (
                     <span className="text-xs text-slate-700">{timeAgo(item.publishedAt)}</span>
@@ -113,7 +128,8 @@ export default function NewsFeed({ symbol, limit = 8, title }: Props) {
                   )}
                 </div>
               </div>
-              <span className="text-slate-700 group-hover:text-slate-400 transition-colors text-xs mt-0.5 shrink-0">↗</span>
+
+              <span className="text-slate-700 group-hover:text-slate-400 transition-colors text-xs shrink-0">↗</span>
             </a>
           ))}
         </div>
