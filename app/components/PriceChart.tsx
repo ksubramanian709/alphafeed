@@ -43,6 +43,19 @@ function formatLabel(epoch: number, interval: string): string {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
 
+// Defined outside component so Recharts never remounts it on re-render
+function CustomTooltip({ active, payload, color }: any) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs pointer-events-none">
+      <span className="font-mono" style={{ color }}>
+        {payload[0].value.toFixed(2)}
+      </span>
+      <span className="text-slate-500 ml-2">{payload[0].payload.label}</span>
+    </div>
+  )
+}
+
 interface Props {
   symbol: string
 }
@@ -87,18 +100,6 @@ export default function PriceChart({ symbol }: Props) {
 
   const minPrice = data.length ? Math.min(...data.map(d => d.price)) * 0.999 : 0
   const maxPrice = data.length ? Math.max(...data.map(d => d.price)) * 1.001 : 0
-
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (!active || !payload?.length) return null
-    return (
-      <div className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs">
-        <span className="font-mono" style={{ color }}>
-          {payload[0].value.toFixed(2)}
-        </span>
-        <span className="text-slate-500 ml-2">{payload[0].payload.label}</span>
-      </div>
-    )
-  }
 
   return (
     <div className="mt-3">
@@ -145,7 +146,7 @@ export default function PriceChart({ symbol }: Props) {
               tickFormatter={v => v.toFixed(0)}
               width={45}
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip color={color} />} />
             <ReferenceLine y={openPrice} stroke="#334155" strokeDasharray="3 3" />
             <Area
               type="monotone"

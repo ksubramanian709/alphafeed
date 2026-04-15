@@ -42,11 +42,14 @@ function isNextWeek(dateStr: string): boolean {
 export default function EarningsCalendar() {
   const [items, setItems]     = useState<CalendarItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter]   = useState<'week' | 'next' | 'month'>('week')
+  const [filter, setFilter]   = useState<'week' | 'next' | 'month'>('month')
 
   useEffect(() => {
     fetch(`${API}/v1/earnings/calendar`)
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(`${r.status}`)
+        return r.json()
+      })
       .then((data: CalendarItem[]) => setItems(Array.isArray(data) ? data : []))
       .catch(() => setItems([]))
       .finally(() => setLoading(false))

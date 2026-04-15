@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -59,12 +59,22 @@ function daysToExpiry(epoch: number): number {
 interface Props { symbol: string; underlyingPrice?: number }
 
 export default function OptionsChain({ symbol, underlyingPrice }: Props) {
+  const [open, setOpen]           = useState(false)
   const [chain, setChain]         = useState<OptionsChain | null>(null)
-  const [loading, setLoading]     = useState(true)
+  const [loading, setLoading]     = useState(false)
   const [error, setError]         = useState('')
   const [tab, setTab]             = useState<Tab>('both')
   const [selectedExp, setSelectedExp] = useState<number | null>(null)
   const [strikeFilter, setStrikeFilter] = useState<'all' | 'itm' | 'otm' | 'near'>('near')
+  const fetchedRef                = useRef(false)
+
+  function toggle() {
+    if (!open && !fetchedRef.current) {
+      fetchedRef.current = true
+      fetchChain()
+    }
+    setOpen(o => !o)
+  }
 
   async function fetchChain(expiration?: number) {
     setLoading(true)
@@ -89,7 +99,13 @@ export default function OptionsChain({ symbol, underlyingPrice }: Props) {
     }
   }
 
-  useEffect(() => { fetchChain() }, [symbol])
+  // Reset on symbol change so new symbol fetches fresh data
+  useEffect(() => {
+    setOpen(false)
+    setChain(null)
+    setError('')
+    fetchedRef.current = false
+  }, [symbol])
 
   function handleExpChange(epoch: number) {
     setSelectedExp(epoch)
@@ -113,25 +129,43 @@ export default function OptionsChain({ symbol, underlyingPrice }: Props) {
   const filteredPuts  = chain ? filterContracts(chain.puts)  : []
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
+    <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
 
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+      {/* Collapse toggle header */}
+      <button
+        onClick={toggle}
+        className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-800/50 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">
             Options Chain
-          </h2>
-          {chain && (
-            <p className="text-xs text-slate-600 mt-0.5">
-              Underlying: <span className="font-mono text-slate-400">${fmtNum(spotPrice)}</span>
-              {selectedExp && (
-                <span className="ml-2">
-                  · {daysToExpiry(selectedExp)}d to expiry
-                </span>
-              )}
-            </p>
+          </span>
+          {chain && selectedExp && (
+            <span className="text-xs text-slate-600">
+              <span className="font-mono text-slate-400">${fmtNum(spotPrice)}</span>
+              <span className="ml-2">· {daysToExpiry(selectedExp)}d to expiry</span>
+            </span>
           )}
         </div>
+        <div className="flex items-center gap-2">
+          {loading && (
+            <span className="w-3.5 h-3.5 border border-slate-600 border-t-slate-300 rounded-full animate-spin" />
+          )}
+          <svg
+            className={`w-4 h-4 text-slate-600 transition-transform ${open ? 'rotate-180' : ''}`}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </button>
+
+      {!open && <div />}
+      {open && <div className="border-t border-slate-800 p-5 space-y-4">
+
+      {/* Sub-header row: calls/puts tabs */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div />
 
         {/* Calls / Both / Puts tabs */}
         <div className="flex rounded-lg overflow-hidden border border-slate-700 text-xs">
@@ -255,6 +289,7 @@ export default function OptionsChain({ symbol, underlyingPrice }: Props) {
           )}
         </div>
       )}
+      </div>}
     </div>
   )
 }
