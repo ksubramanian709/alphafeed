@@ -210,7 +210,7 @@ export default function TickerPage() {
             <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-2">
               Price Chart
             </h2>
-            <PriceChart symbol={quote.symbol} currentPrice={quote.price} />
+            <PriceChart symbol={quote.symbol} />
           </div>
 
           {/* ── Company news ── */}

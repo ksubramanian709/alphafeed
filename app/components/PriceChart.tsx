@@ -45,10 +45,9 @@ function formatLabel(epoch: number, interval: string): string {
 
 interface Props {
   symbol: string
-  currentPrice: number
 }
 
-export default function PriceChart({ symbol, currentPrice }: Props) {
+export default function PriceChart({ symbol }: Props) {
   const [data, setData]         = useState<ChartPoint[]>([])
   const [selected, setSelected] = useState(0)
   const [loading, setLoading]   = useState(false)
