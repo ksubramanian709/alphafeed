@@ -60,25 +60,26 @@ export default function TickerPage() {
   async function fetchQuote(isRefresh = false) {
     if (!isRefresh) setLoading(true)
     try {
-      const [quoteRes, statsRes] = await Promise.allSettled([
-        fetch(`${API}/v1/quote/${symbol}`),
-        fetch(`/api/stats/${encodeURIComponent(symbol)}`),
-      ])
+      // Fetch quote first so we have the price for market cap calculation
+      const quoteRes = await fetch(`${API}/v1/quote/${symbol}`).catch(() => null)
 
       let quoteData: Quote | null = null
-      if (quoteRes.status === 'fulfilled') {
-        const json = await quoteRes.value.json()
+      if (quoteRes) {
+        const json = await quoteRes.json()
         if (!json.error && json.data) quoteData = json.data
       }
 
       if (!quoteData) { setError(`No data found for "${symbol}"`); return }
 
-      // Overlay market cap / 52wk range from stats route if better
-      if (statsRes.status === 'fulfilled') {
-        const stats = await statsRes.value.json()
-        if (stats.marketCap)        quoteData.marketCap        = stats.marketCap
-        if (stats.fiftyTwoWeekHigh) quoteData.fiftyTwoWeekHigh = stats.fiftyTwoWeekHigh
-        if (stats.fiftyTwoWeekLow)  quoteData.fiftyTwoWeekLow  = stats.fiftyTwoWeekLow
+      // Fetch market cap from SEC EDGAR (free, no API key) using current price
+      if (!quoteData.marketCap && quoteData.price > 0) {
+        try {
+          const statsRes = await fetch(
+            `/api/stats/${encodeURIComponent(symbol)}?price=${quoteData.price}`
+          )
+          const stats = await statsRes.json()
+          if (stats.marketCap) quoteData.marketCap = stats.marketCap
+        } catch {}
       }
 
       setQuote(quoteData)
