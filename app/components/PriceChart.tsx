@@ -80,7 +80,8 @@ export default function PriceChart({ symbol }: Props) {
 
   useEffect(() => { loadChart(0) }, [symbol])
 
-  const isUp = currentPrice >= openPrice
+  const lastPrice = data.length ? data[data.length - 1].price : 0
+  const isUp = lastPrice >= openPrice
   const color = isUp ? '#22c55e' : '#ef4444'
   const gradId = `grad-${symbol.replace(/[^a-z0-9]/gi, '')}`
 
