@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import PriceChart from '../../components/PriceChart'
 import NewsFeed from '../../components/NewsFeed'
 import OptionsChain from '../../components/OptionsChain'
+import EarningsDropdown from '../../components/EarningsDropdown'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -213,6 +214,9 @@ export default function TickerPage() {
             </h2>
             <PriceChart symbol={quote.symbol} />
           </div>
+
+          {/* ── Earnings history (dropdown) ── */}
+          <EarningsDropdown symbol={quote.symbol} />
 
           {/* ── Options chain ── */}
           <OptionsChain symbol={quote.symbol} underlyingPrice={quote.price} />

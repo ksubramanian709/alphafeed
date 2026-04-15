@@ -4,6 +4,7 @@ import NewsFeed from './components/NewsFeed'
 import CommodityDashboard from './components/CommodityDashboard'
 import MacroIndicators from './components/MacroIndicators'
 import Watchlist from './components/Watchlist'
+import EarningsCalendar from './components/EarningsCalendar'
 import AgentChat from './components/AgentChat'
 
 export default function Home() {
@@ -101,6 +102,9 @@ export default function Home() {
 
       {/* Macro indicators (FRED) */}
       <MacroIndicators />
+
+      {/* Earnings calendar */}
+      <EarningsCalendar />
 
       {/* Watchlist with live WebSocket prices */}
       <Watchlist />
