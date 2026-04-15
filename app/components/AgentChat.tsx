@@ -3,15 +3,13 @@ import { useEffect, useRef, useState } from 'react'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
-const SUGGESTIONS = [
+const FALLBACK_SUGGESTIONS = [
   'What is the yield curve telling us right now?',
   'Is the S&P 500 in a bull or bear trend?',
-  'Explain how rising rates affect tech stocks',
-  'What is the VIX and what does it mean today?',
-  'How does gold perform during recessions?',
-  'Compare Bitcoin vs gold as inflation hedges',
+  'What is the VIX signalling today?',
+  'How are rising rates affecting tech stocks?',
   'What sectors do well when oil prices rise?',
-  'Explain P/E ratio and when it matters',
+  'Compare Bitcoin vs gold as inflation hedges',
 ]
 
 interface Turn {
@@ -72,11 +70,24 @@ function inlineFormat(text: string) {
 }
 
 export default function AgentChat() {
-  const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput]       = useState('')
-  const [loading, setLoading]   = useState(false)
-  const bottomRef               = useRef<HTMLDivElement>(null)
-  const inputRef                = useRef<HTMLTextAreaElement>(null)
+  const [messages, setMessages]         = useState<Message[]>([])
+  const [input, setInput]               = useState('')
+  const [loading, setLoading]           = useState(false)
+  const [suggestions, setSuggestions]   = useState<string[]>([])
+  const [suggestionsLoading, setSuggestionsLoading] = useState(true)
+  const bottomRef                       = useRef<HTMLDivElement>(null)
+  const inputRef                        = useRef<HTMLTextAreaElement>(null)
+
+  // Fetch today's AI-generated suggestions on mount
+  useEffect(() => {
+    fetch(`${API}/v1/agent/suggestions`)
+      .then(r => r.json())
+      .then((data: string[]) => {
+        setSuggestions(Array.isArray(data) && data.length > 0 ? data : FALLBACK_SUGGESTIONS)
+      })
+      .catch(() => setSuggestions(FALLBACK_SUGGESTIONS))
+      .finally(() => setSuggestionsLoading(false))
+  }, [])
 
   // Auto-scroll to latest message
   useEffect(() => {
@@ -160,17 +171,27 @@ export default function AgentChat() {
 
       {/* Suggestion chips */}
       {showSuggestions && (
-        <div className="flex flex-wrap gap-2 mb-4">
-          {SUGGESTIONS.map(s => (
-            <button
-              key={s}
-              onClick={() => send(s)}
-              className="text-xs bg-slate-900 border border-slate-800 hover:border-slate-600
-                         text-slate-400 hover:text-slate-200 rounded-full px-3 py-1.5 transition-colors"
-            >
-              {s}
-            </button>
-          ))}
+        <div className="mb-4 space-y-2">
+          <p className="text-xs text-slate-600">
+            {suggestionsLoading ? 'Loading today\'s questions…' : 'Today\'s questions'}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {suggestionsLoading
+              ? Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="h-7 w-40 bg-slate-900 border border-slate-800 rounded-full animate-pulse" />
+                ))
+              : suggestions.map(s => (
+                  <button
+                    key={s}
+                    onClick={() => send(s)}
+                    className="text-xs bg-slate-900 border border-slate-800 hover:border-slate-600
+                               text-slate-400 hover:text-slate-200 rounded-full px-3 py-1.5 transition-colors text-left"
+                  >
+                    {s}
+                  </button>
+                ))
+            }
+          </div>
         </div>
       )}
 
