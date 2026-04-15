@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import PriceChart from '../../components/PriceChart'
 import NewsFeed from '../../components/NewsFeed'
+import OptionsChain from '../../components/OptionsChain'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -212,6 +213,9 @@ export default function TickerPage() {
             </h2>
             <PriceChart symbol={quote.symbol} />
           </div>
+
+          {/* ── Options chain ── */}
+          <OptionsChain symbol={quote.symbol} underlyingPrice={quote.price} />
 
           {/* ── Company news ── */}
           <NewsFeed symbol={quote.symbol} limit={10} title={`${quote.symbol} Headlines`} />
