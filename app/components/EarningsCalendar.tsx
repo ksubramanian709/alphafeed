@@ -70,6 +70,46 @@ function buildGrid(year: number, month: number): (Date | null)[][] {
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
+// Major companies by market cap — these get shown first and by default
+const MAJOR = new Set([
+  // Mega cap
+  'AAPL','MSFT','NVDA','AMZN','GOOGL','GOOG','META','TSLA','BRK.B','AVGO',
+  'JPM','LLY','V','UNH','XOM','MA','JNJ','PG','COST','HD','NFLX','BAC',
+  'CRM','ABBV','AMD','ORCL','KO','CVX','MRK','PEP','ADBE','TMO','CSCO',
+  'ACN','LIN','MCD','WMT','ABT','NKE','DHR','TXN','QCOM','HON','PM','GE',
+  'AMGN','IBM','RTX','CAT','SPGI','INTU','LOW','GS','BLK','SBUX','MDT',
+  'DE','BA','AMAT','SYK','ISRG','MMC','GILD','BX','MO','ADP','BMY',
+  'BKNG','VRTX','ELV','REGN','ZTS','ADI','LRCX','PLD','CB','PGR',
+  'MDLZ','EOG','CI','SO','DUK','ITW','ETN','SHW','TJX','CL','WM',
+  'PYPL','APD','AON','HCA','CME','MAR','UBER','ABNB','NOW','SNOW',
+  'PANW','CRWD','NET','ZS','MDB','DDOG','PLTR','COIN','HOOD',
+  'F','GM','T','VZ','DIS','CMCSA','NFLX','PARA','WBD',
+  'MS','C','WFC','USB','AXP','COF','SCHW','BK','TFC',
+  'PFE','MRK','GILD','BIIB','MRNA','BNTX','HZNP',
+  'UPS','FDX','LMT','NOC','GD','HII','L3H',
+  'MSCI','ICE','MCO','FIS','FISV','PAYX','ADP',
+  'FICO','CDNS','SNPS','KLAC','MRVL','MCHP','ON',
+  'SHOP','SQ','ROKU','TTD','TWLO','ZM','DOCU',
+  'NVO','ASML','TSM','BABA','JD','PDD','BIDU',
+  'V','MA','PYPL','ADYEY',
+  'WBA','CVS','MCK','ABC','CAH',
+  'NEE','AEP','D','EXC','SRE',
+  'AMT','PLD','EQIX','CCI','SPG',
+  'FCX','NEM','AA','X','NUE',
+  'RIVN','LCID','NIO','LI','XPEV',
+  'ENPH','FSLR','SEDG','RUN',
+  'RBLX','U','TTWO','EA','ATVI','NTES',
+])
+
+// Shorten a company name to fit a small calendar cell
+function shortName(name: string): string {
+  if (!name) return ''
+  const stopWords = ['Inc.','Inc','Corp.','Corp','Co.','Co','Ltd.','Ltd','Group','Holdings','Technologies','Technology','International','Incorporated','LLC','PLC','N.V.','S.A.']
+  let s = name
+  for (const w of stopWords) s = s.replace(new RegExp('\\s*,?\\s*' + w.replace('.','\\.')  + '\\s*$', 'i'), '')
+  return s.trim().slice(0, 16)
+}
+
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function EarningsCalendar() {
@@ -81,6 +121,7 @@ export default function EarningsCalendar() {
   const [detail, setDetail]         = useState<{ symbol: string; item: CalendarItem } | null>(null)
   const [history, setHistory]       = useState<EarningsHistory | null>(null)
   const [histLoading, setHistLoading] = useState(false)
+  const [showAll, setShowAll]       = useState(false)
 
   useEffect(() => {
     fetch(`${API}/v1/earnings/calendar`)
@@ -90,8 +131,20 @@ export default function EarningsCalendar() {
       .finally(() => setLoading(false))
   }, [])
 
+  // Filter to major companies unless showAll is on
+  const visibleItems = showAll ? items : items.filter(i => MAJOR.has(i.symbol))
+
+  // Sort each day: major companies first, then alphabetical
+  function sortDay(arr: CalendarItem[]): CalendarItem[] {
+    return [...arr].sort((a, b) => {
+      const am = MAJOR.has(a.symbol) ? 0 : 1
+      const bm = MAJOR.has(b.symbol) ? 0 : 1
+      return am !== bm ? am - bm : a.symbol.localeCompare(b.symbol)
+    })
+  }
+
   // Group items by date
-  const byDate = items.reduce<Record<string, CalendarItem[]>>((acc, item) => {
+  const byDate = visibleItems.reduce<Record<string, CalendarItem[]>>((acc, item) => {
     acc[item.reportDate] = acc[item.reportDate] ?? []
     acc[item.reportDate].push(item)
     return acc
@@ -127,27 +180,44 @@ export default function EarningsCalendar() {
     }
   }
 
-  const selectedItems = selectedDate ? (byDate[selectedDate] ?? []) : []
+  const selectedItems = selectedDate ? sortDay(byDate[selectedDate] ?? []) : []
   const filteredSelected = search.trim()
     ? selectedItems.filter(i =>
         i.symbol.toLowerCase().includes(search.toLowerCase()) ||
         i.name?.toLowerCase().includes(search.toLowerCase()))
     : selectedItems
 
-  // For search across all items when no date selected
+  // Search across all items (respects showAll)
   const searchResults = search.trim() && !selectedDate
-    ? items.filter(i =>
+    ? sortDay(visibleItems.filter(i =>
         i.symbol.toLowerCase().includes(search.toLowerCase()) ||
-        i.name?.toLowerCase().includes(search.toLowerCase()))
+        i.name?.toLowerCase().includes(search.toLowerCase())))
     : []
 
   return (
     <section>
       {/* ── Header ── */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-          Earnings Calendar
-        </h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+            Earnings Calendar
+          </h2>
+          {/* Major / All toggle */}
+          <div className="flex rounded-md overflow-hidden border border-slate-700 text-[10px]">
+            <button
+              onClick={() => setShowAll(false)}
+              className={`px-2.5 py-1 transition-colors ${!showAll ? 'bg-slate-700 text-slate-200' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+              Major
+            </button>
+            <button
+              onClick={() => setShowAll(true)}
+              className={`px-2.5 py-1 transition-colors ${showAll ? 'bg-slate-700 text-slate-200' : 'text-slate-500 hover:text-slate-300'}`}
+            >
+              All
+            </button>
+          </div>
+        </div>
         {/* Search */}
         <div className="relative">
           <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-600 pointer-events-none"
@@ -222,21 +292,23 @@ export default function EarningsCalendar() {
               <div key={ri} className="grid grid-cols-7 border-b border-slate-800/50 last:border-0">
                 {row.map((day, ci) => {
                   const key      = day ? toDateKey(day) : ''
-                  const dayItems = key ? (byDate[key] ?? []) : []
+                  const dayItems = key ? sortDay(byDate[key] ?? []) : []
                   const isToday  = key === todayKey
                   const isSel    = key === selectedDate
                   const isWkend  = day ? (day.getDay() === 0 || day.getDay() === 6) : false
                   const hasData  = dayItems.length > 0
+                  const shown    = dayItems.slice(0, 2)
+                  const extra    = dayItems.length - shown.length
 
                   return (
                     <div
                       key={ci}
                       onClick={() => hasData && day && selectDate(key)}
-                      className={`min-h-[72px] p-1.5 border-r border-slate-800/50 last:border-r-0
+                      className={`min-h-[80px] p-1.5 border-r border-slate-800/50 last:border-r-0
                         ${!day ? 'bg-slate-950/40' : ''}
                         ${isWkend && day ? 'bg-slate-900/40' : ''}
-                        ${hasData ? 'cursor-pointer hover:bg-slate-800/50' : ''}
-                        ${isSel ? 'ring-1 ring-inset ring-emerald-500/40 bg-emerald-500/5' : ''}
+                        ${hasData ? 'cursor-pointer hover:bg-slate-800/40' : ''}
+                        ${isSel ? 'ring-1 ring-inset ring-emerald-500/50 bg-emerald-500/5' : ''}
                         transition-colors`}
                     >
                       {day && (
@@ -245,17 +317,22 @@ export default function EarningsCalendar() {
                             ${isToday ? 'bg-emerald-500 text-black' : 'text-slate-500'}`}>
                             {day.getDate()}
                           </div>
-                          <div className="space-y-0.5">
-                            {dayItems.slice(0, 3).map((item, i) => (
+                          <div className="space-y-[3px]">
+                            {shown.map((item, i) => (
                               <div key={i}
-                                className="text-[9px] font-mono font-bold bg-slate-700/70 text-slate-300
-                                           rounded px-1 py-0.5 truncate leading-tight">
-                                {item.symbol}
+                                className={`rounded px-1 py-[2px] truncate leading-tight
+                                  ${MAJOR.has(item.symbol)
+                                    ? 'bg-slate-700 text-slate-200'
+                                    : 'bg-slate-800/80 text-slate-400'}`}>
+                                <div className="text-[9px] font-mono font-bold truncate">{item.symbol}</div>
+                                <div className="text-[8px] text-slate-500 truncate leading-none mt-[1px]">
+                                  {shortName(item.name)}
+                                </div>
                               </div>
                             ))}
-                            {dayItems.length > 3 && (
-                              <div className="text-[9px] text-slate-600 pl-1">
-                                +{dayItems.length - 3}
+                            {extra > 0 && (
+                              <div className="text-[9px] text-slate-600 pl-1 pt-[1px]">
+                                +{extra} more
                               </div>
                             )}
                           </div>
