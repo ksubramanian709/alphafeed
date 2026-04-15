@@ -112,7 +112,7 @@ export default function EarningsCalendar() {
       )}
 
       {!loading && dates.length > 0 && (
-        <div className="space-y-3">
+        <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
           {dates.map(date => (
             <div key={date} className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
               {/* Date header */}
@@ -121,9 +121,9 @@ export default function EarningsCalendar() {
                 <span className="text-xs text-slate-600 ml-2">{grouped[date].length} report{grouped[date].length !== 1 ? 's' : ''}</span>
               </div>
 
-              {/* Companies */}
+              {/* Companies — cap at 8 per day to prevent giant lists */}
               <div className="divide-y divide-slate-800/50">
-                {grouped[date].map((item, i) => (
+                {grouped[date].slice(0, 8).map((item, i) => (
                   <div key={i} className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-800/30 transition-colors">
                     <div className="min-w-0">
                       <span className="font-mono text-sm font-bold text-slate-100">{item.symbol}</span>
@@ -145,6 +145,11 @@ export default function EarningsCalendar() {
                     </div>
                   </div>
                 ))}
+                {grouped[date].length > 8 && (
+                  <div className="px-4 py-2 text-xs text-slate-600">
+                    +{grouped[date].length - 8} more
+                  </div>
+                )}
               </div>
             </div>
           ))}
