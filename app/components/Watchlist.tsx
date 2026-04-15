@@ -62,11 +62,13 @@ export default function Watchlist() {
   const [connected, setConnected] = useState(false)
   const [briefing, setBriefing]   = useState<BriefingResponse | null>(null)
   const [briefingLoading, setBriefingLoading] = useState(false)
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
 
-  const wsRef    = useRef<WebSocket | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const dropRef  = useRef<HTMLDivElement>(null)
-  const hydrated = useRef(false)
+  const wsRef      = useRef<WebSocket | null>(null)
+  const inputRef   = useRef<HTMLInputElement>(null)
+  const dropRef    = useRef<HTMLDivElement>(null)
+  const hydrated   = useRef(false)
+  const dragIdx    = useRef<number | null>(null)
 
   // Hydrate from localStorage on first mount (client-only)
   useEffect(() => {
@@ -184,6 +186,34 @@ export default function Watchlist() {
     }
   }
 
+  function onDragStart(idx: number) {
+    dragIdx.current = idx
+  }
+
+  function onDragOver(e: React.DragEvent, idx: number) {
+    e.preventDefault()
+    if (dragIdx.current !== null && dragIdx.current !== idx) {
+      setDragOverIdx(idx)
+    }
+  }
+
+  function onDrop(idx: number) {
+    const from = dragIdx.current
+    if (from === null || from === idx) { reset(); return }
+    setSymbols(prev => {
+      const next = [...prev]
+      const [item] = next.splice(from, 1)
+      next.splice(idx, 0, item)
+      return next
+    })
+    reset()
+  }
+
+  function reset() {
+    dragIdx.current = null
+    setDragOverIdx(null)
+  }
+
   async function fetchBriefing() {
     if (symbols.length === 0 || briefingLoading) return
     setBriefingLoading(true)
@@ -267,7 +297,8 @@ export default function Watchlist() {
       ) : (
         <div className="rounded-lg border border-slate-800 overflow-hidden">
           {/* Column headers */}
-          <div className="grid grid-cols-[1fr_auto] items-center px-4 py-1.5 bg-slate-950 border-b border-slate-800">
+          <div className="grid grid-cols-[20px_1fr_auto] items-center px-4 py-1.5 bg-slate-950 border-b border-slate-800">
+            <span />
             <span className="text-xs text-slate-600 uppercase tracking-wider">Symbol</span>
             <div className="flex items-center gap-6">
               <span className="text-xs text-slate-600 uppercase tracking-wider w-24 text-right hidden md:block">Range</span>
@@ -285,14 +316,36 @@ export default function Watchlist() {
 
             const priceColor = up ? 'text-green-400' : dn ? 'text-red-400' : 'text-slate-400'
             const badgeBg    = up ? 'bg-green-500/10 border-green-900/40' : dn ? 'bg-red-500/10 border-red-900/40' : 'bg-slate-800 border-slate-700'
-            const rowBg      = idx % 2 === 0 ? 'bg-slate-900' : 'bg-slate-900/60'
+            const isOver     = dragOverIdx === idx
+            const isDragging = dragIdx.current === idx
 
             return (
               <div
                 key={sym}
-                className={`grid grid-cols-[1fr_auto] items-center px-4 py-3 ${rowBg}
-                            hover:bg-slate-800/60 transition-colors group border-b border-slate-800/50 last:border-0`}
+                draggable
+                onDragStart={() => onDragStart(idx)}
+                onDragOver={e => onDragOver(e, idx)}
+                onDrop={() => onDrop(idx)}
+                onDragEnd={reset}
+                className={`grid grid-cols-[20px_1fr_auto] items-center px-4 py-3
+                            transition-colors group border-b border-slate-800/50 last:border-0
+                            ${isDragging ? 'opacity-40' : 'opacity-100'}
+                            ${isOver
+                              ? 'border-t-2 border-t-emerald-500/60 bg-slate-800/60'
+                              : 'bg-slate-900 hover:bg-slate-800/60'
+                            }`}
               >
+                {/* Drag handle */}
+                <div
+                  className="flex flex-col gap-[3px] items-center justify-center cursor-grab active:cursor-grabbing
+                             opacity-0 group-hover:opacity-100 transition-opacity py-1 pr-1 select-none"
+                  title="Drag to reorder"
+                >
+                  <span className="w-3 h-px bg-slate-500 rounded" />
+                  <span className="w-3 h-px bg-slate-500 rounded" />
+                  <span className="w-3 h-px bg-slate-500 rounded" />
+                </div>
+
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-sm font-bold text-slate-100">{sym}</span>
