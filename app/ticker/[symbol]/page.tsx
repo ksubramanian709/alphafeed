@@ -5,6 +5,7 @@ import PriceChart from '../../components/PriceChart'
 import NewsFeed from '../../components/NewsFeed'
 import OptionsChain from '../../components/OptionsChain'
 import EarningsDropdown from '../../components/EarningsDropdown'
+import FundamentalsPanel from '../../components/FundamentalsPanel'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -215,11 +216,14 @@ export default function TickerPage() {
             <PriceChart symbol={quote.symbol} />
           </div>
 
-          {/* ── Earnings history (dropdown) ── */}
-          <EarningsDropdown symbol={quote.symbol} />
-
-          {/* ── Options chain ── */}
-          <OptionsChain symbol={quote.symbol} underlyingPrice={quote.price} />
+          {/* ── Fundamentals / Earnings / Options — equities only ── */}
+          {(quote.assetType === 'EQUITY' || quote.assetType === 'ETF') && (
+            <>
+              <FundamentalsPanel symbol={quote.symbol} currentPrice={quote.price} />
+              <EarningsDropdown symbol={quote.symbol} />
+              <OptionsChain symbol={quote.symbol} underlyingPrice={quote.price} />
+            </>
+          )}
 
           {/* ── Company news ── */}
           <NewsFeed symbol={quote.symbol} limit={10} title={`${quote.symbol} Headlines`} />
