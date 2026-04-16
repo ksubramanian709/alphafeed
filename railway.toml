@@ -1,5 +1,4 @@
 [build]
-builder = "NIXPACKS"
 buildCommand = "cd api && mvn package -q -DskipTests"
 
 [deploy]
