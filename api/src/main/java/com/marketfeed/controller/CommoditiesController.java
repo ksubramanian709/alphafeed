@@ -119,7 +119,7 @@ public class CommoditiesController {
                description = "Energy, metals, grains, softs, livestock, index futures, rates, FX. Cached 2 min.")
     @Cacheable("commodities")
     public ApiResponse<Map<String, List<Quote>>> getFuturesSnapshot() {
-        ExecutorService exec = Executors.newVirtualThreadPerTaskExecutor();
+        ExecutorService exec = Executors.newCachedThreadPool();
 
         // Kick off all fetches in parallel across all sectors
         Map<String, List<CompletableFuture<Quote>>> sectorFutures = new LinkedHashMap<>();

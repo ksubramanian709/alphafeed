@@ -97,6 +97,45 @@ export default function Home() {
         </div>
       </Link>
 
+      {/* ── Earnings CTA ────────────────────────────────────────────── */}
+      <Link href="/earnings" className="block group">
+        <div className="relative overflow-hidden rounded-2xl border border-slate-700/60 bg-gradient-to-br from-slate-900 via-slate-900 to-sky-950/30 p-6 hover:border-sky-500/40 transition-all duration-300">
+          <div className="absolute inset-0 opacity-[0.025]"
+            style={{ backgroundImage: 'linear-gradient(#38bdf8 1px, transparent 1px), linear-gradient(90deg, #38bdf8 1px, transparent 1px)', backgroundSize: '40px 40px' }}
+          />
+          <div className="absolute top-0 right-0 w-64 h-32 bg-sky-500/8 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-full">
+                  Decision Engine
+                </span>
+              </div>
+              <h2 className="text-xl font-bold text-slate-100 mb-1">Earnings This Week</h2>
+              <p className="text-sm text-slate-400 max-w-md">
+                Options-implied expected move, beat/miss history, EPS estimates, and AI read — for every major earnings report this week.
+              </p>
+              <div className="flex flex-wrap gap-2 mt-4">
+                {['Expected Move ±%', 'Beat Rate', 'EPS vs Last Year', 'AI Read'].map(label => (
+                  <span key={label} className="flex items-center gap-1 bg-slate-800/80 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-400 group-hover:border-slate-600 transition-colors">
+                    {label}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="shrink-0">
+              <span className="inline-flex items-center gap-2 bg-sky-700 group-hover:bg-sky-600 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition-colors">
+                View Setups
+                <svg className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </span>
+            </div>
+          </div>
+        </div>
+      </Link>
+
       {/* ── Main 2-column grid ──────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 

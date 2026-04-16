@@ -57,6 +57,10 @@ public class CacheConfig {
         manager.registerCustomCache("earnings",
                 Caffeine.newBuilder().expireAfterWrite(1, TimeUnit.HOURS).maximumSize(300).build());
 
+        // Earnings decision engine — weekly setups with options expected move
+        manager.registerCustomCache("earnings-setups",
+                Caffeine.newBuilder().expireAfterWrite(30, TimeUnit.MINUTES).maximumSize(5).build());
+
         // Upcoming earnings calendar — refresh every 30 minutes
         manager.registerCustomCache("earnings-calendar",
                 Caffeine.newBuilder().expireAfterWrite(30, TimeUnit.MINUTES).maximumSize(1).build());

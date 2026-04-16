@@ -152,7 +152,7 @@ public class MarketsController {
                description = "Returns quotes grouped by: global indices, sector ETFs, mega-cap equities, crypto, commodities. Cached 60s.")
     @Cacheable("markets")
     public ApiResponse<List<Map<String, Object>>> getOverview() {
-        ExecutorService exec = Executors.newVirtualThreadPerTaskExecutor();
+        ExecutorService exec = Executors.newCachedThreadPool();
 
         List<CompletableFuture<Map<String, Object>>> futures = OVERVIEW_SYMBOLS.stream()
             .map(symbol -> CompletableFuture.supplyAsync(() -> {

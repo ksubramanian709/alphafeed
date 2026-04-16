@@ -2,6 +2,7 @@ package com.marketfeed.controller;
 
 import com.marketfeed.model.EarningsCalendarItem;
 import com.marketfeed.model.EarningsHistory;
+import com.marketfeed.model.EarningsSetup;
 import com.marketfeed.service.EarningsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,6 +24,13 @@ public class EarningsController {
     @Operation(summary = "Upcoming earnings reports", description = "Returns companies reporting earnings in the next 30 days, sorted by date.")
     public ResponseEntity<List<EarningsCalendarItem>> calendar() {
         return ResponseEntity.ok(earningsService.getEarningsCalendar());
+    }
+
+    @GetMapping("/week")
+    @Operation(summary = "Earnings decision engine — top setups this week",
+               description = "Top 25 largest-cap companies reporting in the next 7 days with expected move, beat history, and EPS context. Cached 30 min.")
+    public ResponseEntity<List<EarningsSetup>> week() {
+        return ResponseEntity.ok(earningsService.getWeeklySetups());
     }
 
     @GetMapping("/{symbol}")

@@ -3,9 +3,7 @@ package com.marketfeed.service;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.marketfeed.model.EarningsCalendarItem;
-import com.marketfeed.model.EarningsHistory;
-import com.marketfeed.model.QuarterlyEarning;
+import com.marketfeed.model.*;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +17,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 import java.time.*;
 import java.time.DayOfWeek;
 import java.util.*;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -28,6 +27,8 @@ public class EarningsService {
 
     private final RestTemplate restTemplate;
     private final ScreenerService screenerService;
+    private final QuoteService quoteService;
+    private final OptionsService optionsService;
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Value("${market-feed.alpha-vantage.api-key:demo}")
@@ -138,6 +139,173 @@ public class EarningsService {
             .limit(500)
             .sorted(Comparator.comparing(EarningsCalendarItem::getReportDate))
             .collect(Collectors.toList());
+    }
+
+    // ─── Weekly earnings setups ───────────────────────────────────────────────────
+
+    @Cacheable(value = "earnings-setups", key = "'week'")
+    public List<EarningsSetup> getWeeklySetups() {
+        List<EarningsCalendarItem> calendar = getEarningsCalendar();
+
+        // Filter to next 7 calendar days
+        LocalDate today  = LocalDate.now(ZoneId.of("America/New_York"));
+        LocalDate cutoff = today.plusDays(7);
+
+        List<EarningsCalendarItem> thisWeek = calendar.stream()
+            .filter(item -> {
+                try {
+                    LocalDate d = LocalDate.parse(item.getReportDate());
+                    return !d.isBefore(today) && !d.isAfter(cutoff);
+                } catch (Exception e) { return false; }
+            })
+            // Largest caps first, limit to top 25
+            .sorted(Comparator.comparingLong(
+                (EarningsCalendarItem i) -> i.getMarketCap() != null ? i.getMarketCap() : 0L
+            ).reversed())
+            .limit(25)
+            .collect(Collectors.toList());
+
+        if (thisWeek.isEmpty()) return List.of();
+
+        // Parallel fetch setups
+        ExecutorService exec = Executors.newCachedThreadPool();
+        List<CompletableFuture<EarningsSetup>> futures = thisWeek.stream()
+            .map(item -> CompletableFuture.supplyAsync(() -> buildSetup(item), exec))
+            .toList();
+
+        List<EarningsSetup> setups = futures.stream()
+            .map(f -> { try { return f.get(10, TimeUnit.SECONDS); } catch (Exception e) { return null; } })
+            .filter(Objects::nonNull)
+            .sorted(Comparator.comparing(EarningsSetup::getReportDate)
+                .thenComparingLong(s -> -(s.getMarketCap())))
+            .collect(Collectors.toList());
+
+        exec.shutdown();
+        return setups;
+    }
+
+    private EarningsSetup buildSetup(EarningsCalendarItem item) {
+        String symbol = item.getSymbol();
+        try {
+            // 1. Current quote
+            ApiResponse<Quote> qr = quoteService.getQuote(symbol);
+            Quote quote = qr.getData();
+            double price     = quote != null ? quote.getPrice()         : 0;
+            double changePct = quote != null ? quote.getChangePercent() : 0;
+            long   mktCap    = item.getMarketCap() != null ? item.getMarketCap()
+                             : (quote != null ? quote.getMarketCap() : 0L);
+
+            // 2. Earnings history
+            EarningsHistory hist = getEarningsHistory(symbol);
+            List<QuarterlyEarning> quarters = List.of();
+            int    beatCount    = 0;
+            Double avgSurprise  = null;
+
+            if (hist.getQuarterlyEarnings() != null && !hist.getQuarterlyEarnings().isEmpty()) {
+                quarters = hist.getQuarterlyEarnings().stream().limit(4).collect(Collectors.toList());
+                List<Double> surprises = quarters.stream()
+                    .map(QuarterlyEarning::getSurprisePercentage)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+                beatCount = (int) surprises.stream().filter(s -> s > 0).count();
+                if (!surprises.isEmpty()) {
+                    avgSurprise = surprises.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+                }
+            }
+
+            // 3. Expected move from options
+            Double expectedMove = price > 0 ? calcExpectedMove(symbol, item.getReportDate(), price) : null;
+            Double atmIv        = price > 0 ? calcAtmIv(symbol, item.getReportDate(), price) : null;
+
+            return EarningsSetup.builder()
+                .symbol(symbol)
+                .name(item.getName())
+                .reportDate(item.getReportDate())
+                .reportTime(item.getReportTime())
+                .epsEstimate(item.getEstimate())
+                .lastYearEps(item.getLastYearEPS())
+                .analystCount(item.getAnalystCount())
+                .currentPrice(price)
+                .changePercent(changePct)
+                .marketCap(mktCap)
+                .expectedMovePercent(expectedMove)
+                .atmIv(atmIv)
+                .history(quarters)
+                .beatCount(beatCount)
+                .avgSurprisePct(avgSurprise)
+                .build();
+
+        } catch (Exception e) {
+            log.warn("Failed to build earnings setup for {}: {}", symbol, e.getMessage());
+            return EarningsSetup.builder()
+                .symbol(symbol)
+                .name(item.getName())
+                .reportDate(item.getReportDate())
+                .reportTime(item.getReportTime())
+                .marketCap(item.getMarketCap() != null ? item.getMarketCap() : 0L)
+                .error("Data unavailable")
+                .build();
+        }
+    }
+
+    private Double calcExpectedMove(String symbol, String earningsDate, double stockPrice) {
+        try {
+            Long targetExp = findNearestExpAfterEarnings(symbol, earningsDate);
+            ApiResponse<OptionsChain> resp = optionsService.getOptionsChain(symbol, targetExp);
+            if (resp.getData() == null) return null;
+
+            OptionsChain chain = resp.getData();
+            OptionsContract atmCall = findAtm(chain.getCalls(), stockPrice);
+            OptionsContract atmPut  = findAtm(chain.getPuts(),  stockPrice);
+            if (atmCall == null || atmPut == null) return null;
+
+            double callPrice = atmCall.getBid() > 0.01 ? atmCall.getBid() : atmCall.getLastPrice();
+            double putPrice  = atmPut.getBid()  > 0.01 ? atmPut.getBid()  : atmPut.getLastPrice();
+            if (callPrice <= 0 || putPrice <= 0) return null;
+
+            return Math.round(((callPrice + putPrice) / stockPrice * 100.0) * 10.0) / 10.0;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private Double calcAtmIv(String symbol, String earningsDate, double stockPrice) {
+        try {
+            Long targetExp = findNearestExpAfterEarnings(symbol, earningsDate);
+            ApiResponse<OptionsChain> resp = optionsService.getOptionsChain(symbol, targetExp);
+            if (resp.getData() == null) return null;
+
+            OptionsChain chain = resp.getData();
+            OptionsContract atmCall = findAtm(chain.getCalls(), stockPrice);
+            return atmCall != null ? atmCall.getImpliedVolatility() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private Long findNearestExpAfterEarnings(String symbol, String earningsDate) {
+        try {
+            LocalDate ed = LocalDate.parse(earningsDate);
+            long earningsEpoch = ed.atStartOfDay(ZoneOffset.UTC).toEpochSecond();
+
+            // Get the base chain to read available expirations
+            ApiResponse<OptionsChain> base = optionsService.getOptionsChain(symbol, null);
+            if (base.getData() == null || base.getData().getAllExpirationDates() == null) return null;
+
+            return base.getData().getAllExpirationDates().stream()
+                .filter(e -> e >= earningsEpoch)
+                .min(Long::compareTo)
+                .orElse(null);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private OptionsContract findAtm(List<OptionsContract> contracts, double price) {
+        if (contracts == null || contracts.isEmpty()) return null;
+        return contracts.stream()
+            .min(Comparator.comparingDouble(c -> Math.abs(c.getStrike() - price)))
+            .orElse(null);
     }
 
     // ─── Nasdaq earnings calendar — iterates 14 weekdays ─────────────────────────
