@@ -23,21 +23,15 @@ public class YahooFinanceSource implements MarketDataSource {
 
     private final RestTemplate restTemplate;
 
+    // Chart API: &includePrePost=true gets pre/post bars in the same call
     private static final String BASE_URL =
             "https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=%s&range=%s";
+    private static final String QUOTE_URL =
+            "https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=1m&range=1d&includePrePost=true";
     private static final String HISTORY_URL =
             "https://query1.finance.yahoo.com/v8/finance/chart/%s?interval=1d&period1=%d&period2=%d";
     private static final String SUMMARY_URL =
             "https://query1.finance.yahoo.com/v10/finance/quoteSummary/%s?modules=summaryDetail,price";
-    // v7/finance/quote — single call: regular + extended hours + 52wk + mktcap
-    private static final String QUOTE_V7_URL =
-            "https://query1.finance.yahoo.com/v7/finance/quote?symbols=%s" +
-            "&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent," +
-            "regularMarketPreviousClose,regularMarketOpen,regularMarketDayHigh,regularMarketDayLow," +
-            "regularMarketVolume,preMarketPrice,preMarketChange,preMarketChangePercent,preMarketTime," +
-            "postMarketPrice,postMarketChange,postMarketChangePercent,postMarketTime," +
-            "marketState,shortName,longName,currency,quoteType,marketCap," +
-            "fiftyTwoWeekHigh,fiftyTwoWeekLow";
 
     @Override
     public String getName() { return "yahoo_finance"; }
@@ -47,71 +41,9 @@ public class YahooFinanceSource implements MarketDataSource {
 
     @Override
     public Optional<Quote> getQuote(String symbol) {
-        // Try v7/finance/quote first — single call, has extended hours
-        Optional<Quote> v7 = getQuoteV7(symbol);
-        if (v7.isPresent()) return v7;
-        // Fall back to chart API if v7 fails
-        return getQuoteChart(symbol);
-    }
-
-    private Optional<Quote> getQuoteV7(String symbol) {
         try {
-            String url = String.format(QUOTE_V7_URL, symbol);
-            ResponseEntity<V7QuoteResponse> response = restTemplate.exchange(
-                    url, HttpMethod.GET, buildRequest(), V7QuoteResponse.class);
-
-            if (response.getBody() == null) return Optional.empty();
-            V7QuoteResponse.QuoteResponse qr = response.getBody().getQuoteResponse();
-            if (qr == null || qr.getResult() == null || qr.getResult().isEmpty()) return Optional.empty();
-
-            V7QuoteResponse.V7Quote q = qr.getResult().get(0);
-            if (q.getRegularMarketPrice() == 0) return Optional.empty();
-
-            String name = q.getLongName() != null ? q.getLongName()
-                        : q.getShortName() != null ? q.getShortName() : symbol;
-
-            Quote.QuoteBuilder builder = Quote.builder()
-                    .symbol(symbol.toUpperCase())
-                    .name(name)
-                    .price(q.getRegularMarketPrice())
-                    .change(q.getRegularMarketChange())
-                    .changePercent(q.getRegularMarketChangePercent())
-                    .open(q.getRegularMarketOpen())
-                    .high(q.getRegularMarketDayHigh())
-                    .low(q.getRegularMarketDayLow())
-                    .volume(q.getRegularMarketVolume())
-                    .currency(q.getCurrency() != null ? q.getCurrency() : "USD")
-                    .assetType(inferAssetType(q.getQuoteType(), symbol))
-                    .timestamp(Instant.now())
-                    .marketCap(q.getMarketCap())
-                    .fiftyTwoWeekHigh(q.getFiftyTwoWeekHigh())
-                    .fiftyTwoWeekLow(q.getFiftyTwoWeekLow())
-                    .marketState(q.getMarketState());
-
-            // Extended hours
-            String state = q.getMarketState();
-            if ("PRE".equals(state) && q.getPreMarketPrice() > 0) {
-                builder.extendedPrice(q.getPreMarketPrice())
-                       .extendedChange(q.getPreMarketChange())
-                       .extendedChangePercent(q.getPreMarketChangePercent());
-            } else if (("POST".equals(state) || "POSTPOST".equals(state) || "CLOSED".equals(state))
-                       && q.getPostMarketPrice() > 0) {
-                builder.extendedPrice(q.getPostMarketPrice())
-                       .extendedChange(q.getPostMarketChange())
-                       .extendedChangePercent(q.getPostMarketChangePercent());
-            }
-
-            return Optional.of(builder.build());
-
-        } catch (Exception e) {
-            log.debug("v7 quote failed for {}, falling back to chart: {}", symbol, e.getMessage());
-            return Optional.empty();
-        }
-    }
-
-    private Optional<Quote> getQuoteChart(String symbol) {
-        try {
-            String url = String.format(BASE_URL, symbol, "1d", "1d");
+            // 1m chart with includePrePost=true — gives regular + pre/post bars in one call
+            String url = String.format(QUOTE_URL, symbol);
             ResponseEntity<ChartResponse> response = restTemplate.exchange(
                     url, HttpMethod.GET, buildRequest(), ChartResponse.class);
 
@@ -121,6 +53,8 @@ public class YahooFinanceSource implements MarketDataSource {
 
             ChartResponse.Meta meta = result.getMeta();
             double price = meta.getRegularMarketPrice();
+            if (price == 0) return Optional.empty();
+
             double prevClose = meta.getChartPreviousClose() > 0
                     ? meta.getChartPreviousClose()
                     : meta.getRegularMarketPreviousClose();
@@ -131,11 +65,73 @@ public class YahooFinanceSource implements MarketDataSource {
                     ? meta.getRegularMarketChangePercent()
                     : (prevClose > 0 ? (change / prevClose) * 100 : 0);
 
+            // Determine market state and extract extended hours price from bars
+            String marketState = null;
+            Double extPrice = null, extChange = null, extChangePct = null;
+
+            ChartResponse.CurrentTradingPeriod ctp = meta.getCurrentTradingPeriod();
+            List<Long>   timestamps = result.getTimestamps();
+            ChartResponse.Indicators.Quote bars =
+                    (result.getIndicators() != null && result.getIndicators().getQuote() != null
+                     && !result.getIndicators().getQuote().isEmpty())
+                    ? result.getIndicators().getQuote().get(0) : null;
+
+            if (ctp != null && timestamps != null && bars != null && bars.getClose() != null) {
+                long nowEpoch = Instant.now().getEpochSecond();
+                long regStart = ctp.getRegular() != null ? ctp.getRegular().getStart() : 0;
+                long regEnd   = ctp.getRegular() != null ? ctp.getRegular().getEnd()   : 0;
+                long preStart = ctp.getPre()     != null ? ctp.getPre().getStart()     : 0;
+                long preEnd   = ctp.getPre()     != null ? ctp.getPre().getEnd()       : 0;
+                long postStart= ctp.getPost()    != null ? ctp.getPost().getStart()    : 0;
+                long postEnd  = ctp.getPost()    != null ? ctp.getPost().getEnd()      : 0;
+
+                if (nowEpoch >= preStart && nowEpoch < regStart) {
+                    marketState = "PRE";
+                } else if (nowEpoch >= regStart && nowEpoch < regEnd) {
+                    marketState = "REGULAR";
+                } else if (nowEpoch >= postStart && nowEpoch < postEnd) {
+                    marketState = "POST";
+                } else {
+                    marketState = "CLOSED";
+                }
+
+                // Get last bar in the extended window
+                if ("PRE".equals(marketState) || "POST".equals(marketState)) {
+                    long windowStart = "PRE".equals(marketState) ? preStart : postStart;
+                    // Walk backwards for last non-null close in window
+                    for (int i = timestamps.size() - 1; i >= 0; i--) {
+                        long t = timestamps.get(i);
+                        if (t < windowStart) break;
+                        if (i < bars.getClose().size() && bars.getClose().get(i) != null) {
+                            extPrice = bars.getClose().get(i);
+                            extChange = extPrice - price;
+                            extChangePct = price > 0 ? (extChange / price) * 100 : 0;
+                            break;
+                        }
+                    }
+                }
+                // Show AH data when CLOSED too if post-market ran today
+                if ("CLOSED".equals(marketState) && postStart > 0) {
+                    for (int i = timestamps.size() - 1; i >= 0; i--) {
+                        long t = timestamps.get(i);
+                        if (t < postStart) break;
+                        if (t <= postEnd && i < bars.getClose().size() && bars.getClose().get(i) != null) {
+                            extPrice = bars.getClose().get(i);
+                            extChange = extPrice - price;
+                            extChangePct = price > 0 ? (extChange / price) * 100 : 0;
+                            marketState = "POST"; // show as AH
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // quoteSummary for 52wk + market cap (already cached separately)
             QuoteSummary summary = fetchQuoteSummary(symbol);
 
             return Optional.of(Quote.builder()
-                    .symbol(meta.getSymbol())
-                    .name(meta.getLongName() != null ? meta.getLongName() : meta.getSymbol())
+                    .symbol(meta.getSymbol() != null ? meta.getSymbol() : symbol.toUpperCase())
+                    .name(meta.getLongName() != null ? meta.getLongName() : symbol)
                     .price(price)
                     .change(change)
                     .changePercent(changePct)
@@ -149,10 +145,14 @@ public class YahooFinanceSource implements MarketDataSource {
                     .marketCap(summary != null ? summary.getMarketCap() : meta.getMarketCap())
                     .fiftyTwoWeekHigh(summary != null ? summary.getFiftyTwoWeekHigh() : meta.getFiftyTwoWeekHigh())
                     .fiftyTwoWeekLow(summary != null  ? summary.getFiftyTwoWeekLow()  : meta.getFiftyTwoWeekLow())
+                    .marketState(marketState)
+                    .extendedPrice(extPrice)
+                    .extendedChange(extChange)
+                    .extendedChangePercent(extChangePct)
                     .build());
 
         } catch (Exception e) {
-            log.warn("YahooFinance chart getQuote failed for {}: {}", symbol, e.getMessage());
+            log.warn("YahooFinance getQuote failed for {}: {}", symbol, e.getMessage());
             return Optional.empty();
         }
     }
@@ -324,7 +324,7 @@ public class YahooFinanceSource implements MarketDataSource {
             private double regularMarketChange;
             private double regularMarketChangePercent;
             private double regularMarketPreviousClose;
-            private double chartPreviousClose;          // more reliable for futures
+            private double chartPreviousClose;
             private double regularMarketOpen;
             private double regularMarketDayHigh;
             private double regularMarketDayLow;
@@ -332,6 +332,20 @@ public class YahooFinanceSource implements MarketDataSource {
             private long   marketCap;
             private double fiftyTwoWeekHigh;
             private double fiftyTwoWeekLow;
+            private CurrentTradingPeriod currentTradingPeriod;
+        }
+
+        @Data @JsonIgnoreProperties(ignoreUnknown = true)
+        public static class CurrentTradingPeriod {
+            private TradingSession pre;
+            private TradingSession regular;
+            private TradingSession post;
+
+            @Data @JsonIgnoreProperties(ignoreUnknown = true)
+            public static class TradingSession {
+                private long start;
+                private long end;
+            }
         }
 
         @Data @JsonIgnoreProperties(ignoreUnknown = true)
@@ -385,52 +399,4 @@ public class YahooFinanceSource implements MarketDataSource {
         }
     }
 
-    // ---------- v7/finance/quote response POJOs ----------
-
-    @Data @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class V7QuoteResponse {
-        private QuoteResponse quoteResponse;
-
-        @Data @JsonIgnoreProperties(ignoreUnknown = true)
-        public static class QuoteResponse {
-            private List<V7Quote> result;
-        }
-
-        @Data @JsonIgnoreProperties(ignoreUnknown = true)
-        public static class V7Quote {
-            private String symbol;
-            private String longName;
-            private String shortName;
-            private String currency;
-            private String quoteType;
-            private String marketState;  // PRE, REGULAR, POST, POSTPOST, CLOSED
-
-            // Regular session
-            private double regularMarketPrice;
-            private double regularMarketChange;
-            private double regularMarketChangePercent;
-            private double regularMarketPreviousClose;
-            private double regularMarketOpen;
-            private double regularMarketDayHigh;
-            private double regularMarketDayLow;
-            private long   regularMarketVolume;
-
-            // Pre-market
-            private double preMarketPrice;
-            private double preMarketChange;
-            private double preMarketChangePercent;
-            private long   preMarketTime;
-
-            // Post-market (after-hours)
-            private double postMarketPrice;
-            private double postMarketChange;
-            private double postMarketChangePercent;
-            private long   postMarketTime;
-
-            // Stats
-            private long   marketCap;
-            private double fiftyTwoWeekHigh;
-            private double fiftyTwoWeekLow;
-        }
-    }
 }
