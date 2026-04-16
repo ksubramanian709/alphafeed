@@ -97,7 +97,7 @@ export default function TickerPage() {
 
   useEffect(() => {
     fetchQuote()
-    const id = setInterval(() => fetchQuote(true), 30_000)
+    const id = setInterval(() => fetchQuote(true), 15_000)
     return () => clearInterval(id)
   }, [symbol])
 
