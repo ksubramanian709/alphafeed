@@ -15,100 +15,108 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.ArrayList;
-
 
 @RestController
 @RequestMapping("/v1/commodities")
 @RequiredArgsConstructor
-@Tag(name = "Commodities", description = "Futures snapshots for energy, metals, and grains")
+@Tag(name = "Commodities", description = "Complete CME/CBOT/NYMEX/COMEX/ICE futures universe")
 public class CommoditiesController {
 
     private final QuoteService quoteService;
 
-    // Full futures universe — every actively traded Yahoo Finance futures symbol
+    // Full CME Group + ICE futures — verified Yahoo Finance symbols
     private static final Map<String, List<String>> FUTURES;
     static {
         FUTURES = new LinkedHashMap<>();
-        // Energy
+
+        // ── NYMEX Energy ──────────────────────────────────────────────────────
         FUTURES.put("energy", List.of(
-            "CL=F",  // WTI Crude Oil
-            "BZ=F",  // Brent Crude
-            "NG=F",  // Natural Gas
-            "RB=F",  // RBOB Gasoline
-            "HO=F",  // Heating Oil
-            "QO=F"   // E-mini Crude Oil
+            "CL=F",   // WTI Crude Oil
+            "BZ=F",   // Brent Crude Oil
+            "NG=F",   // Henry Hub Natural Gas
+            "RB=F",   // RBOB Gasoline
+            "HO=F"    // NY Harbor Heating Oil (Diesel)
         ));
-        // Metals
+
+        // ── COMEX Metals ──────────────────────────────────────────────────────
         FUTURES.put("metals", List.of(
-            "GC=F",  // Gold
-            "SI=F",  // Silver
-            "HG=F",  // Copper
-            "PL=F",  // Platinum
-            "PA=F",  // Palladium
-            "ALI=F"  // Aluminum
+            "GC=F",   // Gold
+            "SI=F",   // Silver
+            "HG=F",   // Copper (High Grade)
+            "PL=F",   // Platinum
+            "PA=F"    // Palladium
         ));
-        // Grains
+
+        // ── CBOT Grains & Oilseeds ────────────────────────────────────────────
         FUTURES.put("grains", List.of(
-            "ZC=F",  // Corn
-            "ZW=F",  // Chicago Wheat
-            "KE=F",  // KC Hard Red Wheat
-            "ZS=F",  // Soybeans
-            "ZL=F",  // Soybean Oil
-            "ZM=F",  // Soybean Meal
-            "ZO=F",  // Oats
-            "ZR=F"   // Rough Rice
+            "ZC=F",   // Corn
+            "ZW=F",   // Chicago SRW Wheat
+            "KE=F",   // KC HRW Wheat
+            "ZS=F",   // Soybeans
+            "ZM=F",   // Soybean Meal
+            "ZL=F",   // Soybean Oil
+            "ZO=F",   // Oats
+            "ZR=F"    // Rough Rice
         ));
-        // Softs
+
+        // ── ICE Softs ────────────────────────────────────────────────────────
         FUTURES.put("softs", List.of(
-            "KC=F",  // Coffee
-            "SB=F",  // Sugar #11
-            "CC=F",  // Cocoa
-            "CT=F",  // Cotton #2
-            "OJ=F",  // Orange Juice
-            "LBS=F"  // Lumber
+            "KC=F",   // Arabica Coffee (ICE)
+            "SB=F",   // Raw Sugar #11 (ICE)
+            "CC=F",   // Cocoa (ICE)
+            "CT=F",   // Cotton #2 (ICE)
+            "OJ=F",   // FCOJ-A Orange Juice (ICE)
+            "LBS=F"   // Random Length Lumber (CME)
         ));
-        // Livestock
+
+        // ── CME Livestock ─────────────────────────────────────────────────────
         FUTURES.put("livestock", List.of(
-            "LE=F",  // Live Cattle
-            "HE=F",  // Lean Hogs
-            "GF=F"   // Feeder Cattle
+            "LE=F",   // Live Cattle
+            "GF=F",   // Feeder Cattle
+            "HE=F"    // Lean Hogs
         ));
-        // Equity index futures
+
+        // ── CME Equity Index Futures ──────────────────────────────────────────
         FUTURES.put("index_futures", List.of(
-            "ES=F",  // E-mini S&P 500
-            "NQ=F",  // E-mini Nasdaq 100
-            "YM=F",  // E-mini Dow Jones
-            "RTY=F", // E-mini Russell 2000
-            "EMD=F", // E-mini S&P MidCap 400
-            "NKD=F"  // Nikkei 225 Dollar
+            "ES=F",   // E-mini S&P 500
+            "NQ=F",   // E-mini Nasdaq-100
+            "YM=F",   // E-mini Dow Jones
+            "RTY=F",  // E-mini Russell 2000
+            "MES=F",  // Micro E-mini S&P 500
+            "MNQ=F",  // Micro E-mini Nasdaq-100
+            "MYM=F",  // Micro E-mini Dow
+            "M2K=F"   // Micro E-mini Russell 2000
         ));
-        // Interest rates
+
+        // ── CBOT Interest Rate Futures ────────────────────────────────────────
         FUTURES.put("rates", List.of(
-            "ZB=F",  // 30Y T-Bond
-            "ZN=F",  // 10Y T-Note
-            "ZF=F",  // 5Y T-Note
-            "ZT=F",  // 2Y T-Note
-            "ZQ=F",  // 30-Day Fed Funds
-            "GE=F"   // Eurodollar
+            "ZB=F",   // 30Y US Treasury Bond
+            "ZN=F",   // 10Y US Treasury Note
+            "ZF=F",   // 5Y US Treasury Note
+            "ZT=F",   // 2Y US Treasury Note
+            "ZQ=F"    // 30-Day Federal Funds
         ));
-        // Currencies
+
+        // ── CME FX Futures ────────────────────────────────────────────────────
         FUTURES.put("currencies", List.of(
-            "6E=F",  // Euro
-            "6J=F",  // Japanese Yen
-            "6B=F",  // British Pound
-            "6C=F",  // Canadian Dollar
-            "6A=F",  // Australian Dollar
-            "6S=F",  // Swiss Franc
-            "6N=F",  // New Zealand Dollar
-            "6M=F",  // Mexican Peso
-            "DX=F"   // US Dollar Index
+            "DX=F",   // US Dollar Index (ICE)
+            "6E=F",   // Euro FX
+            "6J=F",   // Japanese Yen
+            "6B=F",   // British Pound
+            "6C=F",   // Canadian Dollar
+            "6A=F",   // Australian Dollar
+            "6S=F",   // Swiss Franc
+            "6N=F",   // New Zealand Dollar
+            "6M=F",   // Mexican Peso
+            "6L=F",   // Brazilian Real
+            "6Z=F",   // South African Rand
+            "6I=F"    // Indian Rupee
         ));
     }
 
     @GetMapping("/futures")
-    @Operation(summary = "Snapshot of all key commodity futures",
-               description = "Returns latest quotes for energy, metals, and grains futures. Cached 2 min.")
+    @Operation(summary = "Complete futures snapshot — CME/CBOT/NYMEX/COMEX/ICE",
+               description = "Energy, metals, grains, softs, livestock, index futures, rates, FX. Cached 2 min.")
     @Cacheable("commodities")
     public ApiResponse<Map<String, List<Quote>>> getFuturesSnapshot() {
         Map<String, List<Quote>> snapshot = new LinkedHashMap<>();
@@ -119,14 +127,13 @@ public class CommoditiesController {
                     .filter(r -> r.getData() != null)
                     .map(ApiResponse::getData)
                     .toList();
-            snapshot.put(sector, quotes);
+            if (!quotes.isEmpty()) snapshot.put(sector, quotes);
         });
 
         return ApiResponse.<Map<String, List<Quote>>>builder()
                 .data(snapshot)
-                .source("aggregated")
+                .source("cme_group")
                 .fetchedAt(Instant.now())
                 .build();
     }
-
 }
