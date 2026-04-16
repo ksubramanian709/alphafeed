@@ -61,20 +61,25 @@ export default function MacroIndicators() {
     ? data.DGS10.value - data.DGS2.value
     : null
 
+  // Hide entirely if FRED key not configured
+  if (!loading && error.includes('FRED_API_KEY')) return null
+
   return (
-    <div>
-      {lastUpdate && (
-        <p className="text-[10px] text-slate-700 mb-3">updated {lastUpdate}</p>
-      )}
+    <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden">
+      <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-base">📊</span>
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Macro Indicators</h2>
+          <span className="text-[10px] text-slate-700 border border-slate-800 px-1.5 py-0.5 rounded-full">FRED</span>
+        </div>
+        {lastUpdate && <span className="text-[10px] text-slate-700">updated {lastUpdate}</span>}
+      </div>
+      <div className="p-4">
 
       {loading && <div className="text-slate-600 text-sm">Loading…</div>}
 
-      {error && !data && (
-        <div className="text-slate-600 text-sm">
-          {error.includes('FRED_API_KEY') ? (
-            <span>FRED data unavailable — add a free <span className="font-mono text-slate-500">FRED_API_KEY</span> to enable macro indicators.</span>
-          ) : error}
-        </div>
+      {error && !data && !error.includes('FRED_API_KEY') && (
+        <div className="text-slate-600 text-sm">{error}</div>
       )}
 
       {data && (
@@ -122,6 +127,7 @@ export default function MacroIndicators() {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }

@@ -33,9 +33,9 @@ public class CacheConfig {
         manager.registerCustomCache("wasde",
                 Caffeine.newBuilder().expireAfterWrite(12, TimeUnit.HOURS).maximumSize(10).build());
 
-        // News — Alpha Vantage, refreshed every 15 minutes
+        // News — refreshed every 30 minutes
         manager.registerCustomCache("news",
-                Caffeine.newBuilder().expireAfterWrite(15, TimeUnit.MINUTES).maximumSize(100).build());
+                Caffeine.newBuilder().expireAfterWrite(30, TimeUnit.MINUTES).maximumSize(100).build());
 
         // Markets overview strip — same TTL as individual quotes
         manager.registerCustomCache("markets",

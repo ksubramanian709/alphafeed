@@ -115,11 +115,24 @@ public class NewsService {
             items.addAll(fetchAlphaVantageNews(null, "financial_markets,economy_macro", 8));
         }
 
-        List<NewsItem> deduplicated = deduplicate(items).stream()
+        Instant cutoff24h = Instant.now().minus(24, java.time.temporal.ChronoUnit.HOURS);
+        Instant cutoff72h = Instant.now().minus(72, java.time.temporal.ChronoUnit.HOURS);
+
+        List<NewsItem> all = deduplicate(items).stream()
                 .filter(item -> isFinanciallyRelevant(item.getTitle()))
                 .sorted(Comparator.comparing(NewsItem::getPublishedAt,
                         Comparator.nullsLast(Comparator.reverseOrder())))
-                .limit(20)
+                .collect(Collectors.toList());
+
+        // Prefer articles from the last 24 h; fall back to 72 h if feed is sparse
+        List<NewsItem> fresh = all.stream()
+                .filter(i -> i.getPublishedAt() != null && i.getPublishedAt().isAfter(cutoff24h))
+                .limit(30)
+                .collect(Collectors.toList());
+
+        List<NewsItem> deduplicated = fresh.size() >= 5 ? fresh : all.stream()
+                .filter(i -> i.getPublishedAt() == null || i.getPublishedAt().isAfter(cutoff72h))
+                .limit(30)
                 .collect(Collectors.toList());
 
         return deduplicated.isEmpty()

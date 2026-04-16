@@ -3,6 +3,7 @@ import MarketsOverview from './components/MarketsOverview'
 import MarketPulse from './components/MarketPulse'
 import QuoteSearch from './components/QuoteSearch'
 import NewsFeed from './components/NewsFeed'
+import DailyBriefing from './components/DailyBriefing'
 import CommodityDashboard from './components/CommodityDashboard'
 import CryptoPanel from './components/CryptoPanel'
 import MacroIndicators from './components/MacroIndicators'
@@ -101,7 +102,7 @@ export default function Home() {
 
         {/* Left: news + earnings */}
         <div className="lg:col-span-2 space-y-6">
-          <NewsFeed limit={8} title="Market Headlines" />
+          <DailyBriefing />
           <EarningsCalendar />
         </div>
 
@@ -119,17 +120,8 @@ export default function Home() {
         <CryptoPanel />
       </div>
 
-      {/* ── Macro ───────────────────────────────────────────────────── */}
-      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center gap-2">
-          <span className="text-base">📊</span>
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Macro Indicators</h2>
-          <span className="text-[10px] text-slate-700 border border-slate-800 px-1.5 py-0.5 rounded-full ml-1">FRED</span>
-        </div>
-        <div className="p-4">
-          <MacroIndicators />
-        </div>
-      </div>
+      {/* ── Macro — only renders if FRED key is configured ──────────── */}
+      <MacroIndicators />
 
       {/* ── Footer ──────────────────────────────────────────────────── */}
       <div className="border-t border-slate-800/60 pt-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-700">
