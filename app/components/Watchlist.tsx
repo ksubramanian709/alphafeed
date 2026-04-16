@@ -393,13 +393,13 @@ export default function Watchlist() {
         </div>
       )}
 
-      {/* Morning Briefing */}
+      {/* Daily Briefing */}
       {symbols.length > 0 && (
         <div className="mt-4">
           <div className="flex items-center justify-between mb-3">
             <div>
               <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-                Morning Briefing
+                Daily Briefing
               </span>
               {briefing?.generatedAt && !briefing.error && (
                 <span className="text-xs text-slate-700 ml-2">
