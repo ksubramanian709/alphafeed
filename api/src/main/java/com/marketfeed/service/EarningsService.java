@@ -147,44 +147,54 @@ public class EarningsService {
     public List<EarningsSetup> getWeeklySetups() {
         List<EarningsCalendarItem> calendar = getEarningsCalendar();
 
-        // Filter to next 7 calendar days
+        // Next 14 calendar days — wide enough to always have data
         LocalDate today  = LocalDate.now(ZoneId.of("America/New_York"));
-        LocalDate cutoff = today.plusDays(7);
+        LocalDate cutoff = today.plusDays(14);
 
-        List<EarningsCalendarItem> thisWeek = calendar.stream()
+        List<EarningsCalendarItem> upcoming = calendar.stream()
             .filter(item -> {
                 try {
                     LocalDate d = LocalDate.parse(item.getReportDate());
                     return !d.isBefore(today) && !d.isAfter(cutoff);
                 } catch (Exception e) { return false; }
             })
-            // Largest caps first, limit to top 25
             .sorted(Comparator.comparingLong(
                 (EarningsCalendarItem i) -> i.getMarketCap() != null ? i.getMarketCap() : 0L
             ).reversed())
-            .limit(25)
+            .limit(30)
             .collect(Collectors.toList());
 
-        if (thisWeek.isEmpty()) return List.of();
+        if (upcoming.isEmpty()) {
+            log.info("No upcoming earnings in next 14 days; calendar has {} total items", calendar.size());
+            return List.of();
+        }
 
-        // Parallel fetch setups
+        log.info("Building setups for {} upcoming earnings", upcoming.size());
+
+        // Parallel fetch: quote + options only (history is lazy-loaded per card)
         ExecutorService exec = Executors.newCachedThreadPool();
-        List<CompletableFuture<EarningsSetup>> futures = thisWeek.stream()
-            .map(item -> CompletableFuture.supplyAsync(() -> buildSetup(item), exec))
+        List<CompletableFuture<EarningsSetup>> futures = upcoming.stream()
+            .map(item -> CompletableFuture.supplyAsync(() -> buildSetupFast(item), exec))
             .toList();
 
         List<EarningsSetup> setups = futures.stream()
-            .map(f -> { try { return f.get(10, TimeUnit.SECONDS); } catch (Exception e) { return null; } })
+            .map(f -> { try { return f.get(12, TimeUnit.SECONDS); } catch (Exception e) { return null; } })
             .filter(Objects::nonNull)
             .sorted(Comparator.comparing(EarningsSetup::getReportDate)
                 .thenComparingLong(s -> -(s.getMarketCap())))
             .collect(Collectors.toList());
 
         exec.shutdown();
+        log.info("Weekly setups built: {} of {}", setups.size(), upcoming.size());
         return setups;
     }
 
-    private EarningsSetup buildSetup(EarningsCalendarItem item) {
+    /**
+     * Fast per-symbol setup: calendar data + live quote + options expected move.
+     * Earnings history is NOT fetched here — the frontend loads it lazily via /v1/earnings/{symbol}.
+     * This avoids blasting Alpha Vantage rate limits on 25 parallel calls.
+     */
+    private EarningsSetup buildSetupFast(EarningsCalendarItem item) {
         String symbol = item.getSymbol();
         try {
             // 1. Current quote
@@ -195,25 +205,7 @@ public class EarningsService {
             long   mktCap    = item.getMarketCap() != null ? item.getMarketCap()
                              : (quote != null ? quote.getMarketCap() : 0L);
 
-            // 2. Earnings history
-            EarningsHistory hist = getEarningsHistory(symbol);
-            List<QuarterlyEarning> quarters = List.of();
-            int    beatCount    = 0;
-            Double avgSurprise  = null;
-
-            if (hist.getQuarterlyEarnings() != null && !hist.getQuarterlyEarnings().isEmpty()) {
-                quarters = hist.getQuarterlyEarnings().stream().limit(4).collect(Collectors.toList());
-                List<Double> surprises = quarters.stream()
-                    .map(QuarterlyEarning::getSurprisePercentage)
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
-                beatCount = (int) surprises.stream().filter(s -> s > 0).count();
-                if (!surprises.isEmpty()) {
-                    avgSurprise = surprises.stream().mapToDouble(Double::doubleValue).average().orElse(0);
-                }
-            }
-
-            // 3. Expected move from options
+            // 2. Options-implied expected move (no API key required — Yahoo Finance)
             Double expectedMove = price > 0 ? calcExpectedMove(symbol, item.getReportDate(), price) : null;
             Double atmIv        = price > 0 ? calcAtmIv(symbol, item.getReportDate(), price) : null;
 
@@ -230,20 +222,21 @@ public class EarningsService {
                 .marketCap(mktCap)
                 .expectedMovePercent(expectedMove)
                 .atmIv(atmIv)
-                .history(quarters)
-                .beatCount(beatCount)
-                .avgSurprisePct(avgSurprise)
+                // history intentionally empty — loaded lazily
+                .history(List.of())
+                .beatCount(null)
+                .avgSurprisePct(null)
                 .build();
 
         } catch (Exception e) {
-            log.warn("Failed to build earnings setup for {}: {}", symbol, e.getMessage());
+            log.warn("buildSetupFast failed for {}: {}", symbol, e.getMessage());
             return EarningsSetup.builder()
                 .symbol(symbol)
                 .name(item.getName())
                 .reportDate(item.getReportDate())
                 .reportTime(item.getReportTime())
                 .marketCap(item.getMarketCap() != null ? item.getMarketCap() : 0L)
-                .error("Data unavailable")
+                .history(List.of())
                 .build();
         }
     }

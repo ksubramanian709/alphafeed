@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
 const API = process.env.NEXT_PUBLIC_API_URL
@@ -30,11 +30,6 @@ interface EarningsSetup {
   beatCount: number | null
   avgSurprisePct: number | null
   error: string | null
-}
-
-interface AiInsight {
-  loading: boolean
-  text: string | null
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -68,54 +63,137 @@ function shortName(name: string | null) {
 // ── Beat dots ────────────────────────────────────────────────────────────────
 
 function BeatDots({ history }: { history: QuarterlyEarning[] }) {
-  const dots = history.slice(0, 4).map((q, i) => {
-    const beat = q.surprisePercentage != null ? q.surprisePercentage > 0 : null
+  const items = history.slice(0, 4)
+  const padded = [...items, ...Array(Math.max(0, 4 - items.length)).fill(null)]
+  return (
+    <div className="flex gap-1">
+      {padded.map((q, i) => {
+        const beat = q?.surprisePercentage != null ? q.surprisePercentage > 0 : null
+        return (
+          <div
+            key={i}
+            title={q?.surprisePercentage != null
+              ? `${q.surprisePercentage > 0 ? '+' : ''}${q.surprisePercentage.toFixed(1)}% surprise`
+              : 'No data'}
+            className={`w-4 h-4 rounded-full text-[9px] flex items-center justify-center font-bold
+              ${beat === true  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' :
+                beat === false ? 'bg-red-500/20 text-red-400 border border-red-500/40' :
+                                 'bg-slate-800/60 text-slate-700 border border-slate-700/50'}`}
+          >
+            {beat === true ? '✓' : beat === false ? '✗' : '·'}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── History panel (lazy) ──────────────────────────────────────────────────────
+
+function HistoryPanel({ symbol }: { symbol: string }) {
+  const [state, setState] = useState<{
+    status: 'idle' | 'loading' | 'done' | 'error'
+    history: QuarterlyEarning[]
+    beatCount: number
+    avgSurprise: number | null
+  }>({ status: 'idle', history: [], beatCount: 0, avgSurprise: null })
+
+  async function load() {
+    setState(s => ({ ...s, status: 'loading' }))
+    try {
+      const res  = await fetch(`${API}/v1/earnings/${encodeURIComponent(symbol)}`)
+      const json = await res.json()
+      const quarters: QuarterlyEarning[] = (json.quarterlyEarnings ?? []).slice(0, 4)
+      const surprises = quarters.map(q => q.surprisePercentage).filter((x): x is number => x != null)
+      const beatCount = surprises.filter(s => s > 0).length
+      const avgSurprise = surprises.length > 0
+        ? surprises.reduce((a, b) => a + b, 0) / surprises.length
+        : null
+      setState({ status: 'done', history: quarters, beatCount, avgSurprise })
+    } catch {
+      setState(s => ({ ...s, status: 'error' }))
+    }
+  }
+
+  if (state.status === 'idle') {
     return (
-      <div
-        key={i}
-        title={q.surprisePercentage != null ? `${q.surprisePercentage > 0 ? '+' : ''}${q.surprisePercentage.toFixed(1)}% surprise` : 'N/A'}
-        className={`w-4 h-4 rounded-full text-[9px] flex items-center justify-center font-bold
-          ${beat === true  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' :
-            beat === false ? 'bg-red-500/20 text-red-400 border border-red-500/40' :
-                             'bg-slate-800 text-slate-600 border border-slate-700'}`}
+      <button
+        onClick={load}
+        className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-slate-800/30 border border-slate-700/40
+                   hover:bg-slate-800/60 hover:border-slate-600 transition-colors group"
       >
-        {beat === true ? '✓' : beat === false ? '✗' : '?'}
-      </div>
-    )
-  })
-  // pad to 4
-  while (dots.length < 4) {
-    dots.push(
-      <div key={`pad-${dots.length}`} className="w-4 h-4 rounded-full bg-slate-800/40 border border-slate-800" />
+        <span className="text-[10px] text-slate-600 uppercase tracking-widest">History</span>
+        <span className="text-[10px] text-slate-600 group-hover:text-slate-400 transition-colors">Load last 4Q →</span>
+      </button>
     )
   }
-  return <div className="flex gap-1">{dots}</div>
+
+  if (state.status === 'loading') {
+    return (
+      <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-800/30 border border-slate-700/40">
+        <span className="text-[10px] text-slate-600 uppercase tracking-widest">History</span>
+        <div className="flex gap-1">
+          {[0,1,2,3].map(i => <div key={i} className="w-4 h-4 rounded-full bg-slate-700 animate-pulse" />)}
+        </div>
+      </div>
+    )
+  }
+
+  if (state.status === 'error') {
+    return (
+      <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-800/30 border border-slate-700/40">
+        <span className="text-[10px] text-slate-600 uppercase tracking-widest">History</span>
+        <span className="text-[10px] text-slate-700">Unavailable</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-800/30 border border-slate-700/40">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] text-slate-600 uppercase tracking-widest">History</span>
+        <BeatDots history={state.history} />
+      </div>
+      <div className="text-right">
+        {state.history.length > 0 && (
+          <div className={`text-[10px] font-semibold ${
+            state.beatCount >= 3 ? 'text-emerald-400' :
+            state.beatCount <= 1 ? 'text-red-400' : 'text-slate-400'
+          }`}>Beat {state.beatCount}/{state.history.length}</div>
+        )}
+        {state.avgSurprise != null && (
+          <div className={`text-[9px] ${state.avgSurprise > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+            avg {state.avgSurprise > 0 ? '+' : ''}{state.avgSurprise.toFixed(1)}%
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 // ── AI Read panel ─────────────────────────────────────────────────────────────
 
 function AiReadPanel({ symbol }: { symbol: string }) {
-  const [state, setState] = useState<{ loading: boolean; text: string | null; error: boolean }>({
-    loading: false, text: null, error: false,
+  const [state, setState] = useState<{ status: 'idle' | 'loading' | 'done' | 'error'; text: string | null }>({
+    status: 'idle', text: null,
   })
 
   async function load() {
-    setState({ loading: true, text: null, error: false })
+    setState({ status: 'loading', text: null })
     try {
       const res  = await fetch(`${API}/v1/agent/insights/${encodeURIComponent(symbol)}?assetType=EQUITY`)
       const json = await res.json()
-      if (json.error) { setState({ loading: false, text: null, error: true }); return }
-      // Prefer earningsAnalysis or summary from insights
+      if (json.error) { setState({ status: 'error', text: null }); return }
       const text = json.earningsSummary || json.summary || json.keyThesis || json.analysis || null
-      setState({ loading: false, text, error: !text })
+      setState({ status: text ? 'done' : 'error', text })
     } catch {
-      setState({ loading: false, text: null, error: true })
+      setState({ status: 'error', text: null })
     }
   }
 
-  if (state.loading) {
+  if (state.status === 'loading') {
     return (
-      <div className="mt-3 rounded-lg bg-slate-800/40 border border-slate-700/40 px-3 py-2.5">
+      <div className="rounded-lg bg-slate-800/40 border border-slate-700/40 px-3 py-2.5">
         <div className="flex items-center gap-2 text-xs text-slate-500">
           <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -127,11 +205,11 @@ function AiReadPanel({ symbol }: { symbol: string }) {
     )
   }
 
-  if (state.text) {
+  if (state.status === 'done' && state.text) {
     return (
-      <div className="mt-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20 px-3 py-2.5">
+      <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/20 px-3 py-2.5">
         <div className="flex items-start gap-2">
-          <span className="text-emerald-500 text-xs mt-0.5 shrink-0">AI</span>
+          <span className="text-emerald-500 text-[10px] font-semibold mt-0.5 shrink-0">AI</span>
           <p className="text-xs text-slate-300 leading-relaxed">{state.text}</p>
         </div>
       </div>
@@ -141,14 +219,14 @@ function AiReadPanel({ symbol }: { symbol: string }) {
   return (
     <button
       onClick={load}
-      className="mt-3 w-full text-left rounded-lg bg-slate-800/30 border border-slate-700/40 px-3 py-2
+      className="w-full text-left rounded-lg bg-slate-800/30 border border-slate-700/40 px-3 py-2
                  hover:bg-slate-800/60 hover:border-slate-600/60 transition-colors group"
     >
       <span className="text-xs text-slate-500 group-hover:text-slate-400 flex items-center gap-1.5 transition-colors">
         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.347.347a3.75 3.75 0 01-5.304-5.303 5 5 0 00-7.072 7.072z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
-        Get AI read on this earnings
+        {state.status === 'error' ? 'AI read unavailable' : 'Get AI read on this earnings'}
       </span>
     </button>
   )
@@ -168,19 +246,11 @@ function SetupCard({ s }: { s: EarningsSetup }) {
     : 'text-sky-400'
     : 'text-slate-600'
 
-  const beatLabel = s.beatCount != null && s.history?.length > 0
-    ? `Beat ${s.beatCount}/${Math.min(s.history.length, 4)}`
-    : null
-
-  const avgLabel = s.avgSurprisePct != null
-    ? `avg ${s.avgSurprisePct > 0 ? '+' : ''}${s.avgSurprisePct.toFixed(1)}%`
-    : null
-
   return (
-    <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col gap-0 hover:border-slate-700 transition-colors">
+    <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col gap-3 hover:border-slate-700 transition-colors">
 
-      {/* Top row: name + date */}
-      <div className="flex items-start justify-between gap-2 mb-3">
+      {/* Top row: symbol + date */}
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-mono font-bold text-slate-100 text-sm">{s.symbol}</span>
@@ -203,7 +273,7 @@ function SetupCard({ s }: { s: EarningsSetup }) {
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-3 gap-2 mb-3">
+      <div className="grid grid-cols-3 gap-2">
 
         {/* Price */}
         <div className="bg-slate-800/40 rounded-xl p-2.5">
@@ -239,7 +309,7 @@ function SetupCard({ s }: { s: EarningsSetup }) {
           {s.epsEstimate != null ? (
             <>
               <div className="font-mono font-bold text-sm text-slate-100">
-                {s.epsEstimate >= 0 ? '' : ''}{s.epsEstimate.toFixed(2)}
+                {s.epsEstimate.toFixed(2)}
               </div>
               {s.lastYearEps != null && (
                 <div className="text-[10px] text-slate-600">vs {s.lastYearEps.toFixed(2)} LY</div>
@@ -251,37 +321,16 @@ function SetupCard({ s }: { s: EarningsSetup }) {
         </div>
       </div>
 
-      {/* Beat history */}
-      <div className="flex items-center justify-between mb-3 bg-slate-800/30 rounded-xl px-3 py-2">
-        <div className="flex items-center gap-2">
-          <span className="text-[9px] text-slate-600 uppercase tracking-widest">History</span>
-          {s.history && s.history.length > 0
-            ? <BeatDots history={s.history} />
-            : <span className="text-[10px] text-slate-700">No data</span>
-          }
-        </div>
-        <div className="text-right">
-          {beatLabel && (
-            <div className={`text-[10px] font-semibold ${
-              s.beatCount != null && s.beatCount >= 3 ? 'text-emerald-400' :
-              s.beatCount != null && s.beatCount <= 1 ? 'text-red-400' : 'text-slate-400'
-            }`}>{beatLabel}</div>
-          )}
-          {avgLabel && (
-            <div className={`text-[9px] ${s.avgSurprisePct != null && s.avgSurprisePct > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-              {avgLabel}
-            </div>
-          )}
-        </div>
-      </div>
+      {/* History — loads lazily on click */}
+      <HistoryPanel symbol={s.symbol} />
 
-      {/* AI read */}
+      {/* AI read — loads on click */}
       <AiReadPanel symbol={s.symbol} />
 
       {/* CTA */}
       <Link
         href={`/ticker/${encodeURIComponent(s.symbol)}`}
-        className="mt-3 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-slate-800/50 border border-slate-700/50
+        className="flex items-center justify-center gap-1.5 py-2 rounded-xl bg-slate-800/50 border border-slate-700/50
                    text-xs text-slate-400 hover:text-slate-200 hover:border-slate-600 hover:bg-slate-800 transition-all"
       >
         View full setup
