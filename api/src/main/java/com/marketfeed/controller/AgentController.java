@@ -64,9 +64,11 @@ public class AgentController {
     // ── Endpoints ────────────────────────────────────────────────────────────────
 
     @GetMapping("/insights/{symbol}")
-    @Operation(summary = "AI bull/bear analysis for a ticker")
+    @Operation(summary = "AI analysis for any symbol — equity, index, crypto, futures")
     public ResponseEntity<com.marketfeed.model.StockInsight> insights(
-            @PathVariable String symbol, HttpServletRequest httpReq) {
+            @PathVariable String symbol,
+            @RequestParam(defaultValue = "EQUITY") String assetType,
+            HttpServletRequest httpReq) {
         String ip = clientIp(httpReq);
         if (isRateLimited(ip)) {
             return ResponseEntity.status(429).body(
@@ -75,7 +77,7 @@ public class AgentController {
                     .error("Rate limit reached — try again later.")
                     .build());
         }
-        com.marketfeed.model.StockInsight result = agentService.getInsights(symbol);
+        com.marketfeed.model.StockInsight result = agentService.getInsights(symbol, assetType);
         if (result.getError() != null) return ResponseEntity.status(503).body(result);
         return ResponseEntity.ok(result);
     }

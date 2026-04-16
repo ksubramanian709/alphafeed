@@ -217,10 +217,8 @@ export default function TickerPage() {
             <PriceChart symbol={quote.symbol} />
           </div>
 
-          {/* ── AI Insights — equities and ETFs only ── */}
-          {(quote.assetType === 'EQUITY' || quote.assetType === 'ETF') && (
-            <AIInsights symbol={quote.symbol} />
-          )}
+          {/* ── AI Insights — all asset types ── */}
+          <AIInsights symbol={quote.symbol} assetType={quote.assetType} />
 
           {/* ── Fundamentals / Earnings / Options — equities only ── */}
           {(quote.assetType === 'EQUITY' || quote.assetType === 'ETF') && (

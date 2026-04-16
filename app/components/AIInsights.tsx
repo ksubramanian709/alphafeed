@@ -33,16 +33,26 @@ const SENTIMENT_STYLES = {
   },
 }
 
-export default function AIInsights({ symbol }: { symbol: string }) {
+const LABELS: Record<string, { up: string; down: string; role: string }> = {
+  INDEX:  { up: 'Risk-On Factors',  down: 'Risk-Off Factors',  role: 'macro strategist'     },
+  CRYPTO: { up: 'Upside Factors',   down: 'Downside Factors',  role: 'crypto analyst'        },
+  FUTURE: { up: 'Demand Tailwinds', down: 'Supply Headwinds',  role: 'commodities analyst'   },
+  ETF:    { up: 'Bull Case',        down: 'Bear Case',         role: 'analyst'               },
+  EQUITY: { up: 'Bull Case',        down: 'Bear Case',         role: 'analyst'               },
+}
+
+export default function AIInsights({ symbol, assetType = 'EQUITY' }: { symbol: string; assetType?: string }) {
   const [insight, setInsight] = useState<Insight | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
+
+  const labels = LABELS[assetType?.toUpperCase()] ?? LABELS.EQUITY
 
   async function load() {
     setLoading(true)
     setError(null)
     try {
-      const r = await fetch(`${API}/v1/agent/insights/${encodeURIComponent(symbol)}`)
+      const r = await fetch(`${API}/v1/agent/insights/${encodeURIComponent(symbol)}?assetType=${encodeURIComponent(assetType)}`)
       if (r.status === 429) { setError('Rate limit reached — try again in an hour.'); return }
       if (!r.ok)            { setError('Analysis temporarily unavailable.'); return }
       const d: Insight = await r.json()
@@ -136,7 +146,7 @@ export default function AIInsights({ symbol }: { symbol: string }) {
                 <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 10l7-7m0 0l7 7m-7-7v18" />
                 </svg>
-                <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider">Bull Case</span>
+                <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider">{labels.up}</span>
               </div>
               <ul className="space-y-1.5">
                 {insight.bullPoints.map((pt, i) => (
@@ -154,7 +164,7 @@ export default function AIInsights({ symbol }: { symbol: string }) {
                 <svg className="w-3.5 h-3.5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
                 </svg>
-                <span className="text-[10px] font-semibold text-red-400 uppercase tracking-wider">Bear Case</span>
+                <span className="text-[10px] font-semibold text-red-400 uppercase tracking-wider">{labels.down}</span>
               </div>
               <ul className="space-y-1.5">
                 {insight.bearPoints.map((pt, i) => (

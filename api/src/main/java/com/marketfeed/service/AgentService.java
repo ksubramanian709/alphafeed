@@ -268,12 +268,13 @@ public class AgentService {
     // ─── Per-ticker AI insights ──────────────────────────────────────────────────
 
     @org.springframework.cache.annotation.Cacheable(value = "insights", key = "#symbol.toUpperCase()")
-    public StockInsight getInsights(String symbol) {
+    public StockInsight getInsights(String symbol, String assetType) {
         if (anthropicKey == null || anthropicKey.isBlank()) {
             return StockInsight.builder().symbol(symbol).error("ANTHROPIC_API_KEY not configured").generatedAt(Instant.now()).build();
         }
 
-        String sym = symbol.toUpperCase();
+        String sym  = symbol.toUpperCase();
+        String type = assetType != null ? assetType.toUpperCase() : "EQUITY";
         StringBuilder ctx = new StringBuilder();
         ctx.append("Symbol: ").append(sym).append("\n");
         ctx.append("Date: ").append(LocalDate.now()).append("\n\n");
@@ -283,7 +284,7 @@ public class AgentService {
             ApiResponse<Quote> qr = quoteService.getQuote(sym);
             if (qr.getData() != null) {
                 Quote q = qr.getData();
-                ctx.append("Company: ").append(q.getName()).append("\n");
+                if (q.getName() != null) ctx.append("Name: ").append(q.getName()).append("\n");
                 String sign = q.getChangePercent() >= 0 ? "+" : "";
                 ctx.append("Price: $").append(String.format("%.2f", q.getPrice()))
                    .append(" (").append(sign).append(String.format("%.2f", q.getChangePercent())).append("% today)\n");
@@ -312,18 +313,27 @@ public class AgentService {
             log.warn("Insights: news fetch failed for {}", sym);
         }
 
-        String prompt = "You are a sharp equity analyst. Analyze " + sym + " and return ONLY a JSON object — no markdown, no explanation, just the raw JSON.\n\n"
+        // Build prompt tailored to asset type
+        String role, upLabel, downLabel, catalystHint;
+        switch (type) {
+            case "INDEX"  -> { role = "macro strategist"; upLabel = "risk-on tailwinds";  downLabel = "risk-off headwinds"; catalystHint = "next major macro event, Fed meeting, or data release"; }
+            case "CRYPTO" -> { role = "crypto analyst";   upLabel = "upside factors";     downLabel = "downside factors";   catalystHint = "next protocol event, regulatory development, or macro catalyst"; }
+            case "FUTURE" -> { role = "commodities analyst"; upLabel = "supply/demand tailwinds"; downLabel = "supply/demand headwinds"; catalystHint = "next OPEC meeting, crop report, inventory release, or macro trigger"; }
+            default       -> { role = "equity analyst";   upLabel = "bull case arguments"; downLabel = "bear case arguments"; catalystHint = "next earnings date, product launch, or macro event"; }
+        }
+
+        String prompt = "You are a sharp " + role + ". Analyze " + sym + " and return ONLY a JSON object — no markdown, no explanation.\n\n"
             + "Context:\n" + ctx + "\n"
             + "Return this exact JSON shape:\n"
             + "{\n"
             + "  \"sentiment\": \"bullish\" | \"bearish\" | \"neutral\",\n"
-            + "  \"summary\": \"2-3 sentence big-picture take on the stock right now, grounded in the data above\",\n"
-            + "  \"bullPoints\": [\"specific bull argument 1\", \"specific bull argument 2\", \"specific bull argument 3\"],\n"
-            + "  \"bearPoints\": [\"specific bear argument 1\", \"specific bear argument 2\", \"specific bear argument 3\"],\n"
+            + "  \"summary\": \"2-3 sentences on the current situation, grounded in the data above\",\n"
+            + "  \"bullPoints\": [\"" + upLabel + " 1\", \"" + upLabel + " 2\", \"" + upLabel + " 3\"],\n"
+            + "  \"bearPoints\": [\"" + downLabel + " 1\", \"" + downLabel + " 2\", \"" + downLabel + " 3\"],\n"
             + "  \"keyRisk\": \"single biggest near-term risk in one sentence\",\n"
-            + "  \"catalyst\": \"next near-term catalyst (earnings date, product launch, macro event, etc.)\"\n"
+            + "  \"catalyst\": \"" + catalystHint + "\"\n"
             + "}\n\n"
-            + "Rules: be specific and data-driven, never generic. Each bullet max 20 words. Use the price action and news above.";
+            + "Rules: be specific and data-driven. Each bullet max 20 words. Use actual price and news data above.";
 
         try {
             List<Map<String, Object>> messages = List.of(Map.of("role", "user", "content", prompt));
