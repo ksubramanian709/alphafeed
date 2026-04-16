@@ -20,31 +20,69 @@ public class MarketsController {
 
     private final QuoteService quoteService;
 
-    // Ordered for display: indices → rates → crypto → commodities
+    // Indices → mega-caps → crypto → commodities
     private static final List<String> OVERVIEW_SYMBOLS = List.of(
-        "^GSPC",    // S&P 500
-        "^IXIC",    // Nasdaq
-        "^DJI",     // Dow Jones
-        "^RUT",     // Russell 2000
-        "^VIX",     // VIX
-        "^TNX",     // 10Y Treasury yield
-        "BTC-USD",  // Bitcoin
-        "ETH-USD",  // Ethereum
-        "GC=F",     // Gold
-        "CL=F"      // WTI Crude Oil
+        // Indices
+        "^GSPC", "^IXIC", "^DJI", "^RUT", "^VIX", "^TNX",
+        // Mega-cap equities
+        "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "TSLA", "BRK-B", "JPM", "V",
+        // Crypto
+        "BTC-USD", "ETH-USD", "SOL-USD",
+        // Commodities
+        "GC=F", "CL=F", "NG=F", "SI=F"
     );
 
-    private static final Map<String, String> LABELS = Map.of(
-        "^GSPC",   "S&P 500",
-        "^IXIC",   "Nasdaq",
-        "^DJI",    "Dow",
-        "^RUT",    "Russell 2000",
-        "^VIX",    "VIX",
-        "^TNX",    "10Y Yield",
-        "BTC-USD", "Bitcoin",
-        "ETH-USD", "Ethereum",
-        "GC=F",    "Gold",
-        "CL=F",    "Oil (WTI)"
+    private static final Map<String, String> LABELS = Map.ofEntries(
+        Map.entry("^GSPC",   "S&P 500"),
+        Map.entry("^IXIC",   "Nasdaq"),
+        Map.entry("^DJI",    "Dow"),
+        Map.entry("^RUT",    "Russell 2K"),
+        Map.entry("^VIX",    "VIX"),
+        Map.entry("^TNX",    "10Y Yield"),
+        Map.entry("AAPL",    "Apple"),
+        Map.entry("MSFT",    "Microsoft"),
+        Map.entry("NVDA",    "NVIDIA"),
+        Map.entry("AMZN",    "Amazon"),
+        Map.entry("META",    "Meta"),
+        Map.entry("GOOGL",   "Alphabet"),
+        Map.entry("TSLA",    "Tesla"),
+        Map.entry("BRK-B",   "Berkshire"),
+        Map.entry("JPM",     "JPMorgan"),
+        Map.entry("V",       "Visa"),
+        Map.entry("BTC-USD", "Bitcoin"),
+        Map.entry("ETH-USD", "Ethereum"),
+        Map.entry("SOL-USD", "Solana"),
+        Map.entry("GC=F",    "Gold"),
+        Map.entry("CL=F",    "Oil (WTI)"),
+        Map.entry("NG=F",    "Nat Gas"),
+        Map.entry("SI=F",    "Silver")
+    );
+
+    // Category groupings for the market pulse view
+    private static final Map<String, String> CATEGORIES = Map.ofEntries(
+        Map.entry("^GSPC",   "indices"),
+        Map.entry("^IXIC",   "indices"),
+        Map.entry("^DJI",    "indices"),
+        Map.entry("^RUT",    "indices"),
+        Map.entry("^VIX",    "indices"),
+        Map.entry("^TNX",    "indices"),
+        Map.entry("AAPL",    "equities"),
+        Map.entry("MSFT",    "equities"),
+        Map.entry("NVDA",    "equities"),
+        Map.entry("AMZN",    "equities"),
+        Map.entry("META",    "equities"),
+        Map.entry("GOOGL",   "equities"),
+        Map.entry("TSLA",    "equities"),
+        Map.entry("BRK-B",   "equities"),
+        Map.entry("JPM",     "equities"),
+        Map.entry("V",       "equities"),
+        Map.entry("BTC-USD", "crypto"),
+        Map.entry("ETH-USD", "crypto"),
+        Map.entry("SOL-USD", "crypto"),
+        Map.entry("GC=F",    "commodities"),
+        Map.entry("CL=F",    "commodities"),
+        Map.entry("NG=F",    "commodities"),
+        Map.entry("SI=F",    "commodities")
     );
 
     @GetMapping("/overview")
@@ -63,6 +101,7 @@ public class MarketsController {
                 Map<String, Object> item = new LinkedHashMap<>();
                 item.put("symbol",        symbol);
                 item.put("label",         LABELS.getOrDefault(symbol, symbol));
+                item.put("category",      CATEGORIES.getOrDefault(symbol, "equities"));
                 item.put("price",         q.getPrice());
                 item.put("change",        q.getChange());
                 item.put("changePercent", q.getChangePercent());

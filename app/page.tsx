@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import MarketsOverview from './components/MarketsOverview'
+import MarketPulse from './components/MarketPulse'
 import QuoteSearch from './components/QuoteSearch'
 import NewsFeed from './components/NewsFeed'
 import CommodityDashboard from './components/CommodityDashboard'
@@ -38,11 +39,8 @@ export default function Home() {
         </div>
       </div>
 
-      {/* ── Markets strip ───────────────────────────────────────────── */}
-      <section>
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-3">Live Markets</p>
-        <MarketsOverview />
-      </section>
+      {/* ── Market Pulse — categorized color-coded overview ─────────── */}
+      <MarketPulse />
 
       {/* ── Screener CTA ────────────────────────────────────────────── */}
       <Link href="/screener" className="block group">

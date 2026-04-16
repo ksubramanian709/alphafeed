@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 
 
 @RestController
@@ -25,12 +26,15 @@ public class CommoditiesController {
 
     private final QuoteService quoteService;
 
-    // Barchart's core verticals — energy, metals, grains
-    private static final Map<String, List<String>> FUTURES = Map.of(
-        "energy",  List.of("CL=F", "NG=F", "BZ=F"),   // Crude, NatGas, Brent
-        "metals",  List.of("GC=F", "SI=F", "HG=F"),   // Gold, Silver, Copper
-        "grains",  List.of("ZC=F", "ZW=F", "ZS=F")    // Corn, Wheat, Soybeans
-    );
+    // Full commodity universe across six verticals
+    private static final Map<String, List<String>> FUTURES = new LinkedHashMap<>(Map.of(
+        "energy",    List.of("CL=F", "BZ=F", "NG=F", "RB=F", "HO=F"),          // Crude, Brent, NatGas, Gasoline, Heating Oil
+        "metals",    List.of("GC=F", "SI=F", "HG=F", "PL=F", "PA=F"),          // Gold, Silver, Copper, Platinum, Palladium
+        "grains",    List.of("ZC=F", "ZW=F", "ZS=F", "ZO=F", "ZR=F"),          // Corn, Wheat, Soybeans, Oats, Rice
+        "softs",     List.of("KC=F", "SB=F", "CC=F", "CT=F", "OJ=F"),          // Coffee, Sugar, Cocoa, Cotton, OJ
+        "livestock", List.of("LE=F", "HE=F", "GF=F"),                           // Live Cattle, Lean Hogs, Feeder Cattle
+        "financials",List.of("ES=F", "NQ=F", "YM=F", "RTY=F", "ZN=F", "ZB=F") // E-mini S&P/Nasdaq/Dow/Russell, 10Y/30Y
+    ));
 
     @GetMapping("/futures")
     @Operation(summary = "Snapshot of all key commodity futures",

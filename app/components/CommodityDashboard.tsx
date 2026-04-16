@@ -5,21 +5,50 @@ import Link from 'next/link'
 const API = process.env.NEXT_PUBLIC_API_URL
 
 const SECTOR_META: Record<string, { label: string; icon: string; accent: string; glow: string }> = {
-  energy: { label: 'Energy',  icon: '⚡', accent: 'text-orange-400', glow: 'hover:border-orange-500/40 hover:bg-orange-950/10' },
-  metals: { label: 'Metals',  icon: '✦',  accent: 'text-yellow-400', glow: 'hover:border-yellow-500/40 hover:bg-yellow-950/10' },
-  grains: { label: 'Grains',  icon: '🌾', accent: 'text-lime-400',   glow: 'hover:border-lime-500/40 hover:bg-lime-950/10'   },
+  energy:     { label: 'Energy',      icon: '⚡', accent: 'text-orange-400', glow: 'hover:border-orange-500/40 hover:bg-orange-950/10'  },
+  metals:     { label: 'Metals',      icon: '✦',  accent: 'text-yellow-400', glow: 'hover:border-yellow-500/40 hover:bg-yellow-950/10'  },
+  grains:     { label: 'Grains',      icon: '🌾', accent: 'text-lime-400',   glow: 'hover:border-lime-500/40 hover:bg-lime-950/10'      },
+  softs:      { label: 'Softs',       icon: '☕', accent: 'text-amber-400',  glow: 'hover:border-amber-500/40 hover:bg-amber-950/10'    },
+  livestock:  { label: 'Livestock',   icon: '🐄', accent: 'text-rose-400',   glow: 'hover:border-rose-500/40 hover:bg-rose-950/10'      },
+  financials: { label: 'Financials',  icon: '📊', accent: 'text-sky-400',    glow: 'hover:border-sky-500/40 hover:bg-sky-950/10'        },
 }
 
 const SYMBOL_META: Record<string, { name: string; unit: string }> = {
-  'CL=F': { name: 'WTI Crude',  unit: '/bbl'   },
-  'NG=F': { name: 'Nat Gas',    unit: '/MMBtu'  },
-  'BZ=F': { name: 'Brent',      unit: '/bbl'   },
-  'GC=F': { name: 'Gold',       unit: '/oz'    },
-  'SI=F': { name: 'Silver',     unit: '/oz'    },
-  'HG=F': { name: 'Copper',     unit: '/lb'    },
-  'ZC=F': { name: 'Corn',       unit: '/bu'    },
-  'ZW=F': { name: 'Wheat',      unit: '/bu'    },
-  'ZS=F': { name: 'Soybeans',   unit: '/bu'    },
+  // Energy
+  'CL=F':  { name: 'WTI Crude',    unit: '/bbl'   },
+  'BZ=F':  { name: 'Brent',        unit: '/bbl'   },
+  'NG=F':  { name: 'Nat Gas',      unit: '/MMBtu' },
+  'RB=F':  { name: 'RBOB Gas',     unit: '/gal'   },
+  'HO=F':  { name: 'Heating Oil',  unit: '/gal'   },
+  // Metals
+  'GC=F':  { name: 'Gold',         unit: '/oz'    },
+  'SI=F':  { name: 'Silver',       unit: '/oz'    },
+  'HG=F':  { name: 'Copper',       unit: '/lb'    },
+  'PL=F':  { name: 'Platinum',     unit: '/oz'    },
+  'PA=F':  { name: 'Palladium',    unit: '/oz'    },
+  // Grains
+  'ZC=F':  { name: 'Corn',         unit: '/bu'    },
+  'ZW=F':  { name: 'Wheat',        unit: '/bu'    },
+  'ZS=F':  { name: 'Soybeans',     unit: '/bu'    },
+  'ZO=F':  { name: 'Oats',         unit: '/bu'    },
+  'ZR=F':  { name: 'Rice',         unit: '/cwt'   },
+  // Softs
+  'KC=F':  { name: 'Coffee',       unit: '/lb'    },
+  'SB=F':  { name: 'Sugar #11',    unit: '/lb'    },
+  'CC=F':  { name: 'Cocoa',        unit: '/t'     },
+  'CT=F':  { name: 'Cotton',       unit: '/lb'    },
+  'OJ=F':  { name: 'Orange Juice', unit: '/lb'    },
+  // Livestock
+  'LE=F':  { name: 'Live Cattle',  unit: '/lb'    },
+  'HE=F':  { name: 'Lean Hogs',    unit: '/lb'    },
+  'GF=F':  { name: 'Feeder Cattle',unit: '/lb'    },
+  // Financials
+  'ES=F':  { name: 'E-mini S&P',   unit: 'pts'    },
+  'NQ=F':  { name: 'E-mini Nasdaq',unit: 'pts'    },
+  'YM=F':  { name: 'E-mini Dow',   unit: 'pts'    },
+  'RTY=F': { name: 'E-mini Russell',unit: 'pts'   },
+  'ZN=F':  { name: '10Y T-Note',   unit: ''       },
+  'ZB=F':  { name: '30Y T-Bond',   unit: ''       },
 }
 
 interface Quote {

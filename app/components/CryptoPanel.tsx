@@ -5,14 +5,22 @@ import Link from 'next/link'
 const API = process.env.NEXT_PUBLIC_API_URL
 
 const CRYPTOS = [
-  { symbol: 'BTC-USD',  name: 'Bitcoin',   abbr: 'BTC',  color: 'text-orange-400', bg: 'bg-orange-500/10',  border: 'border-orange-500/20',  glow: 'hover:border-orange-400/50 hover:shadow-orange-900/40'  },
-  { symbol: 'ETH-USD',  name: 'Ethereum',  abbr: 'ETH',  color: 'text-violet-400', bg: 'bg-violet-500/10',  border: 'border-violet-500/20',  glow: 'hover:border-violet-400/50 hover:shadow-violet-900/40'  },
-  { symbol: 'SOL-USD',  name: 'Solana',    abbr: 'SOL',  color: 'text-purple-400', bg: 'bg-purple-500/10',  border: 'border-purple-500/20',  glow: 'hover:border-purple-400/50 hover:shadow-purple-900/40'  },
-  { symbol: 'BNB-USD',  name: 'BNB',       abbr: 'BNB',  color: 'text-yellow-400', bg: 'bg-yellow-500/10',  border: 'border-yellow-500/20',  glow: 'hover:border-yellow-400/50 hover:shadow-yellow-900/40'  },
-  { symbol: 'XRP-USD',  name: 'XRP',       abbr: 'XRP',  color: 'text-sky-400',    bg: 'bg-sky-500/10',     border: 'border-sky-500/20',     glow: 'hover:border-sky-400/50 hover:shadow-sky-900/40'        },
-  { symbol: 'DOGE-USD', name: 'Dogecoin',  abbr: 'DOGE', color: 'text-amber-400',  bg: 'bg-amber-500/10',   border: 'border-amber-500/20',   glow: 'hover:border-amber-400/50 hover:shadow-amber-900/40'    },
-  { symbol: 'ADA-USD',  name: 'Cardano',   abbr: 'ADA',  color: 'text-blue-400',   bg: 'bg-blue-500/10',    border: 'border-blue-500/20',    glow: 'hover:border-blue-400/50 hover:shadow-blue-900/40'      },
-  { symbol: 'AVAX-USD', name: 'Avalanche', abbr: 'AVAX', color: 'text-red-400',    bg: 'bg-red-500/10',     border: 'border-red-500/20',     glow: 'hover:border-red-400/50 hover:shadow-red-900/40'        },
+  { symbol: 'BTC-USD',   name: 'Bitcoin',    abbr: 'BTC',   color: 'text-orange-400', bg: 'bg-orange-500/10',  border: 'border-orange-500/20',  glow: 'hover:border-orange-400/50' },
+  { symbol: 'ETH-USD',   name: 'Ethereum',   abbr: 'ETH',   color: 'text-violet-400', bg: 'bg-violet-500/10',  border: 'border-violet-500/20',  glow: 'hover:border-violet-400/50' },
+  { symbol: 'SOL-USD',   name: 'Solana',     abbr: 'SOL',   color: 'text-purple-400', bg: 'bg-purple-500/10',  border: 'border-purple-500/20',  glow: 'hover:border-purple-400/50' },
+  { symbol: 'BNB-USD',   name: 'BNB',        abbr: 'BNB',   color: 'text-yellow-400', bg: 'bg-yellow-500/10',  border: 'border-yellow-500/20',  glow: 'hover:border-yellow-400/50' },
+  { symbol: 'XRP-USD',   name: 'XRP',        abbr: 'XRP',   color: 'text-sky-400',    bg: 'bg-sky-500/10',     border: 'border-sky-500/20',     glow: 'hover:border-sky-400/50'    },
+  { symbol: 'DOGE-USD',  name: 'Dogecoin',   abbr: 'DOGE',  color: 'text-amber-400',  bg: 'bg-amber-500/10',   border: 'border-amber-500/20',   glow: 'hover:border-amber-400/50'  },
+  { symbol: 'ADA-USD',   name: 'Cardano',    abbr: 'ADA',   color: 'text-blue-400',   bg: 'bg-blue-500/10',    border: 'border-blue-500/20',    glow: 'hover:border-blue-400/50'   },
+  { symbol: 'AVAX-USD',  name: 'Avalanche',  abbr: 'AVAX',  color: 'text-red-400',    bg: 'bg-red-500/10',     border: 'border-red-500/20',     glow: 'hover:border-red-400/50'    },
+  { symbol: 'LINK-USD',  name: 'Chainlink',  abbr: 'LINK',  color: 'text-blue-300',   bg: 'bg-blue-400/10',    border: 'border-blue-400/20',    glow: 'hover:border-blue-300/50'   },
+  { symbol: 'DOT-USD',   name: 'Polkadot',   abbr: 'DOT',   color: 'text-pink-400',   bg: 'bg-pink-500/10',    border: 'border-pink-500/20',    glow: 'hover:border-pink-400/50'   },
+  { symbol: 'MATIC-USD', name: 'Polygon',    abbr: 'MATIC', color: 'text-purple-300', bg: 'bg-purple-400/10',  border: 'border-purple-400/20',  glow: 'hover:border-purple-300/50' },
+  { symbol: 'UNI-USD',   name: 'Uniswap',    abbr: 'UNI',   color: 'text-pink-300',   bg: 'bg-pink-400/10',    border: 'border-pink-400/20',    glow: 'hover:border-pink-300/50'   },
+  { symbol: 'LTC-USD',   name: 'Litecoin',   abbr: 'LTC',   color: 'text-slate-300',  bg: 'bg-slate-500/10',   border: 'border-slate-500/20',   glow: 'hover:border-slate-300/50'  },
+  { symbol: 'ATOM-USD',  name: 'Cosmos',     abbr: 'ATOM',  color: 'text-indigo-400', bg: 'bg-indigo-500/10',  border: 'border-indigo-500/20',  glow: 'hover:border-indigo-400/50' },
+  { symbol: 'NEAR-USD',  name: 'NEAR',       abbr: 'NEAR',  color: 'text-green-400',  bg: 'bg-green-500/10',   border: 'border-green-500/20',   glow: 'hover:border-green-400/50'  },
+  { symbol: 'ICP-USD',   name: 'Internet Computer', abbr: 'ICP', color: 'text-orange-300', bg: 'bg-orange-400/10', border: 'border-orange-400/20', glow: 'hover:border-orange-300/50' },
 ]
 
 interface Quote {
