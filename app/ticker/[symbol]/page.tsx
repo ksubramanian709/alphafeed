@@ -25,6 +25,10 @@ interface Quote {
   marketCap: number
   fiftyTwoWeekHigh: number
   fiftyTwoWeekLow: number
+  marketState: string | null
+  extendedPrice: number | null
+  extendedChange: number | null
+  extendedChangePercent: number | null
 }
 
 function fmt(n: number, decimals = 2) { return n.toFixed(decimals) }
@@ -163,6 +167,28 @@ export default function TickerPage() {
                 <div className={`font-mono text-sm mt-0.5 ${cls}`}>
                   {sign}{fmt(quote.change)} ({sign}{fmt(quote.changePercent)}%) today
                 </div>
+
+                {/* Extended hours */}
+                {quote.extendedPrice != null && quote.extendedChange != null && quote.extendedChangePercent != null && (
+                  <div className="mt-2 flex flex-col items-end gap-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-widest border ${
+                        quote.marketState === 'PRE'
+                          ? 'text-sky-400 border-sky-500/30 bg-sky-500/10'
+                          : 'text-orange-400 border-orange-500/30 bg-orange-500/10'
+                      }`}>
+                        {quote.marketState === 'PRE' ? 'Pre-Market' : 'After Hours'}
+                      </span>
+                    </div>
+                    <div className={`font-mono font-bold text-xl ${quote.extendedChange >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {fmt(quote.extendedPrice)}
+                    </div>
+                    <div className={`font-mono text-xs ${quote.extendedChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                      {quote.extendedChange >= 0 ? '+' : ''}{fmt(quote.extendedChange)} ({quote.extendedChange >= 0 ? '+' : ''}{fmt(quote.extendedChangePercent)}%)
+                    </div>
+                  </div>
+                )}
+
                 {lastUpdate && (
                   <div className="text-xs text-slate-700 mt-1">updated {lastUpdate}</div>
                 )}

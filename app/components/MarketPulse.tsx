@@ -12,6 +12,10 @@ interface MarketItem {
   change: number
   changePercent: number
   currency: string
+  marketState: string | null
+  extendedPrice: number | null
+  extendedChange: number | null
+  extendedChangePercent: number | null
 }
 
 const CATEGORIES = [
@@ -32,13 +36,21 @@ function fmt(price: number, symbol: string): string {
 }
 
 function PulseTile({ item }: { item: MarketItem }) {
-  const up    = item.change > 0
-  const dn    = item.change < 0
-  const sign  = item.change >= 0 ? '+' : ''
+  const hasExtended = item.extendedPrice != null && item.extendedChange != null
+  const isPost = item.marketState === 'POST' || item.marketState === 'POSTPOST' || item.marketState === 'CLOSED'
+  const isPre  = item.marketState === 'PRE'
+
+  // Use extended price for color when in extended session
+  const displayChange = hasExtended && item.extendedChange != null ? item.extendedChange : item.change
+  const up    = displayChange > 0
+  const dn    = displayChange < 0
   const color = up ? 'text-green-400' : dn ? 'text-red-400' : 'text-slate-400'
   const bg    = up ? 'bg-green-500/8 border-green-900/40 hover:border-green-500/40 hover:bg-green-500/12'
                    : dn ? 'bg-red-500/8 border-red-900/40 hover:border-red-500/40 hover:bg-red-500/12'
                    : 'bg-slate-900 border-slate-800 hover:border-slate-600'
+
+  const sign = item.change >= 0 ? '+' : ''
+  const extSign = (item.extendedChange ?? 0) >= 0 ? '+' : ''
 
   return (
     <Link
@@ -46,15 +58,41 @@ function PulseTile({ item }: { item: MarketItem }) {
       className={`group shrink-0 border rounded-xl px-3.5 py-2.5 min-w-[118px] transition-all duration-150
                   hover:scale-[1.03] hover:shadow-md ${bg}`}
     >
-      <div className="text-[10px] text-slate-500 truncate mb-1 group-hover:text-slate-400 transition-colors">
-        {item.label}
+      <div className="flex items-center justify-between gap-1 mb-1">
+        <div className="text-[10px] text-slate-500 truncate group-hover:text-slate-400 transition-colors">
+          {item.label}
+        </div>
+        {hasExtended && (isPre || isPost) && (
+          <span className={`text-[8px] font-semibold px-1 py-px rounded leading-none shrink-0 ${
+            isPre ? 'text-sky-500 bg-sky-500/10' : 'text-orange-400 bg-orange-500/10'
+          }`}>
+            {isPre ? 'PRE' : 'AH'}
+          </span>
+        )}
       </div>
-      <div className={`font-mono font-bold text-sm ${color}`}>
-        {fmt(item.price, item.symbol)}
-      </div>
-      <div className={`font-mono text-[10px] mt-0.5 ${color}`}>
-        {sign}{item.changePercent.toFixed(2)}%
-      </div>
+
+      {hasExtended && item.extendedPrice != null && item.extendedChangePercent != null ? (
+        <>
+          <div className={`font-mono font-bold text-sm ${color}`}>
+            {fmt(item.extendedPrice, item.symbol)}
+          </div>
+          <div className={`font-mono text-[10px] mt-0.5 ${color}`}>
+            {extSign}{item.extendedChangePercent.toFixed(2)}%
+          </div>
+          <div className="font-mono text-[9px] text-slate-700 mt-px">
+            reg {fmt(item.price, item.symbol)}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className={`font-mono font-bold text-sm ${color}`}>
+            {fmt(item.price, item.symbol)}
+          </div>
+          <div className={`font-mono text-[10px] mt-0.5 ${color}`}>
+            {sign}{item.changePercent.toFixed(2)}%
+          </div>
+        </>
+      )}
     </Link>
   )
 }

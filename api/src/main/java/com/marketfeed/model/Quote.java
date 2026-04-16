@@ -26,6 +26,12 @@ public class Quote {
     private double fiftyTwoWeekHigh;
     private double fiftyTwoWeekLow;
 
+    // Extended hours — non-null when pre/post market session is active
+    private String  marketState;           // "PRE", "REGULAR", "POST", "CLOSED"
+    private Double  extendedPrice;
+    private Double  extendedChange;
+    private Double  extendedChangePercent;
+
     public enum AssetType {
         EQUITY, FUTURE, FOREX, INDEX, COMMODITY, CRYPTO
     }
