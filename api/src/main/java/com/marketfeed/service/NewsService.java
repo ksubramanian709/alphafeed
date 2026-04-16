@@ -62,12 +62,10 @@ public class NewsService {
         "https://feeds.a.djnewswires.com/rss/WSJ_wsjonline";             // WSJ (public)
     private static final String FT_RSS =
         "https://www.ft.com/rss/home/us";                                // Financial Times
-    private static final String THESTREET_MARKETS_RSS =
-        "https://www.thestreet.com/markets/rss.xml";
-    private static final String NASDAQ_NEWS_RSS =
-        "https://www.nasdaq.com/feed/rssoutbound?category=Markets";
     private static final String BARRONS_RSS =
         "https://www.barrons.com/rss/public/rss.xml";
+    private static final String CNN_BUSINESS_RSS =
+        "http://rss.cnn.com/rss/money_latest.rss";                        // CNN Business
 
     // ── Title relevance: must contain at least one of these financial keywords ──
     private static final java.util.regex.Pattern FINANCE_PATTERN =
@@ -108,8 +106,7 @@ public class NewsService {
         items.addAll(fetchRss(FT_RSS,                  "Financial Times",3));
         items.addAll(fetchRss(WSJ_MARKETS_RSS,         "WSJ",            3));
         items.addAll(fetchRss(BARRONS_RSS,             "Barron's",       3));
-        items.addAll(fetchRss(NASDAQ_NEWS_RSS,         "Nasdaq",         3));
-        items.addAll(fetchRss(THESTREET_MARKETS_RSS,   "TheStreet",      3));
+        items.addAll(fetchRss(CNN_BUSINESS_RSS,        "CNN Business",   3));
         items.addAll(fetchRss(
             String.format(GOOGLE_NEWS_RSS, "stock+market+economy+geopolitics"), "Google News", 4));
 
