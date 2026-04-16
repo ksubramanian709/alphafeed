@@ -37,9 +37,9 @@ public class CacheConfig {
         manager.registerCustomCache("news",
                 Caffeine.newBuilder().expireAfterWrite(30, TimeUnit.MINUTES).maximumSize(100).build());
 
-        // Markets overview strip — same TTL as individual quotes
+        // Markets overview strip — 60s TTL, larger size for expanded symbol set
         manager.registerCustomCache("markets",
-                Caffeine.newBuilder().expireAfterWrite(60, TimeUnit.SECONDS).maximumSize(5).build());
+                Caffeine.newBuilder().expireAfterWrite(60, TimeUnit.SECONDS).maximumSize(20).build());
 
         // Alpha Vantage OVERVIEW — changes infrequently, cache 1 hour
         manager.registerCustomCache("fundamentals",

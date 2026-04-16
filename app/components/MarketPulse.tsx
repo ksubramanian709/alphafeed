@@ -15,10 +15,11 @@ interface MarketItem {
 }
 
 const CATEGORIES = [
-  { key: 'indices',    label: 'Indices',    icon: '📈' },
-  { key: 'equities',   label: 'Mega Caps',  icon: '🏢' },
-  { key: 'crypto',     label: 'Crypto',     icon: '₿'  },
-  { key: 'commodities',label: 'Commodities',icon: '🛢️' },
+  { key: 'indices',    label: 'Global Indices', icon: '📈' },
+  { key: 'sectors',    label: 'US Sectors',     icon: '🏛️' },
+  { key: 'equities',   label: 'Mega Caps',      icon: '🏢' },
+  { key: 'crypto',     label: 'Crypto',         icon: '₿'  },
+  { key: 'commodities',label: 'Commodities',    icon: '🛢️' },
 ]
 
 function fmt(price: number, symbol: string): string {

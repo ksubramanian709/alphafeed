@@ -61,7 +61,9 @@ export default function MacroIndicators() {
     ? data.DGS10.value - data.DGS2.value
     : null
 
-  // Hide entirely if FRED key not configured
+  // Hide entirely if FRED data is unavailable (key not set → empty data object)
+  const hasData = data && Object.keys(data).length > 0
+  if (!loading && !hasData && !error) return null
   if (!loading && error.includes('FRED_API_KEY')) return null
 
   return (

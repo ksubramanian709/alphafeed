@@ -20,74 +20,133 @@ public class MarketsController {
 
     private final QuoteService quoteService;
 
-    // Indices → mega-caps → crypto → commodities
+    // ── Ordered symbol list ────────────────────────────────────────────────────
     private static final List<String> OVERVIEW_SYMBOLS = List.of(
-        // Indices
-        "^GSPC", "^IXIC", "^DJI", "^RUT", "^VIX", "^TNX",
+        // US indices
+        "^GSPC", "^IXIC", "^DJI", "^RUT", "^MID", "^VIX", "^TNX", "^SOX",
+        // European indices
+        "^GDAXI", "^FTSE", "^FCHI", "^STOXX50E", "^AEX", "^IBEX", "^SSMI",
+        // Asia-Pacific indices
+        "^N225", "^HSI", "000001.SS", "^KS11", "^AXJO", "^STI", "^BSESN",
+        // Latin America / Other
+        "^BVSP", "^MXX",
+        // US sector ETFs (as sector proxies)
+        "XLK", "XLF", "XLE", "XLV", "XLY", "XLI", "XLC", "XLB", "XLU", "XLRE",
         // Mega-cap equities
-        "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "TSLA", "BRK-B", "JPM", "V",
+        "AAPL", "MSFT", "NVDA", "AMZN", "META", "GOOGL", "TSLA", "BRK-B",
+        "JPM", "V", "UNH", "XOM", "JNJ", "WMT", "MA", "PG", "ORCL", "NFLX",
         // Crypto
-        "BTC-USD", "ETH-USD", "SOL-USD",
+        "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "XRP-USD", "DOGE-USD",
+        "ADA-USD", "AVAX-USD", "LINK-USD", "DOT-USD",
         // Commodities
-        "GC=F", "CL=F", "NG=F", "SI=F"
+        "GC=F", "SI=F", "CL=F", "BZ=F", "NG=F", "HG=F"
     );
 
-    private static final Map<String, String> LABELS = Map.ofEntries(
-        Map.entry("^GSPC",   "S&P 500"),
-        Map.entry("^IXIC",   "Nasdaq"),
-        Map.entry("^DJI",    "Dow"),
-        Map.entry("^RUT",    "Russell 2K"),
-        Map.entry("^VIX",    "VIX"),
-        Map.entry("^TNX",    "10Y Yield"),
-        Map.entry("AAPL",    "Apple"),
-        Map.entry("MSFT",    "Microsoft"),
-        Map.entry("NVDA",    "NVIDIA"),
-        Map.entry("AMZN",    "Amazon"),
-        Map.entry("META",    "Meta"),
-        Map.entry("GOOGL",   "Alphabet"),
-        Map.entry("TSLA",    "Tesla"),
-        Map.entry("BRK-B",   "Berkshire"),
-        Map.entry("JPM",     "JPMorgan"),
-        Map.entry("V",       "Visa"),
-        Map.entry("BTC-USD", "Bitcoin"),
-        Map.entry("ETH-USD", "Ethereum"),
-        Map.entry("SOL-USD", "Solana"),
-        Map.entry("GC=F",    "Gold"),
-        Map.entry("CL=F",    "Oil (WTI)"),
-        Map.entry("NG=F",    "Nat Gas"),
-        Map.entry("SI=F",    "Silver")
-    );
+    // ── Human-readable labels ──────────────────────────────────────────────────
+    private static final Map<String, String> LABELS;
+    static {
+        LABELS = new LinkedHashMap<>();
+        // US indices
+        LABELS.put("^GSPC",     "S&P 500");
+        LABELS.put("^IXIC",     "Nasdaq");
+        LABELS.put("^DJI",      "Dow Jones");
+        LABELS.put("^RUT",      "Russell 2K");
+        LABELS.put("^MID",      "S&P MidCap");
+        LABELS.put("^VIX",      "VIX");
+        LABELS.put("^TNX",      "10Y Yield");
+        LABELS.put("^SOX",      "Philly Semi");
+        // European
+        LABELS.put("^GDAXI",    "DAX (Germany)");
+        LABELS.put("^FTSE",     "FTSE 100 (UK)");
+        LABELS.put("^FCHI",     "CAC 40 (France)");
+        LABELS.put("^STOXX50E", "Euro Stoxx 50");
+        LABELS.put("^AEX",      "AEX (Netherlands)");
+        LABELS.put("^IBEX",     "IBEX 35 (Spain)");
+        LABELS.put("^SSMI",     "SMI (Switzerland)");
+        // Asia-Pacific
+        LABELS.put("^N225",     "Nikkei 225");
+        LABELS.put("^HSI",      "Hang Seng");
+        LABELS.put("000001.SS", "Shanghai Comp.");
+        LABELS.put("^KS11",     "KOSPI (Korea)");
+        LABELS.put("^AXJO",     "ASX 200 (Australia)");
+        LABELS.put("^STI",      "STI (Singapore)");
+        LABELS.put("^BSESN",    "Sensex (India)");
+        // LatAm / other
+        LABELS.put("^BVSP",     "Bovespa (Brazil)");
+        LABELS.put("^MXX",      "IPC (Mexico)");
+        // Sector ETFs
+        LABELS.put("XLK",  "Tech");
+        LABELS.put("XLF",  "Financials");
+        LABELS.put("XLE",  "Energy");
+        LABELS.put("XLV",  "Health Care");
+        LABELS.put("XLY",  "Consumer Disc.");
+        LABELS.put("XLI",  "Industrials");
+        LABELS.put("XLC",  "Comm. Services");
+        LABELS.put("XLB",  "Materials");
+        LABELS.put("XLU",  "Utilities");
+        LABELS.put("XLRE", "Real Estate");
+        // Equities
+        LABELS.put("AAPL",  "Apple");
+        LABELS.put("MSFT",  "Microsoft");
+        LABELS.put("NVDA",  "NVIDIA");
+        LABELS.put("AMZN",  "Amazon");
+        LABELS.put("META",  "Meta");
+        LABELS.put("GOOGL", "Alphabet");
+        LABELS.put("TSLA",  "Tesla");
+        LABELS.put("BRK-B", "Berkshire");
+        LABELS.put("JPM",   "JPMorgan");
+        LABELS.put("V",     "Visa");
+        LABELS.put("UNH",   "UnitedHealth");
+        LABELS.put("XOM",   "ExxonMobil");
+        LABELS.put("JNJ",   "J&J");
+        LABELS.put("WMT",   "Walmart");
+        LABELS.put("MA",    "Mastercard");
+        LABELS.put("PG",    "P&G");
+        LABELS.put("ORCL",  "Oracle");
+        LABELS.put("NFLX",  "Netflix");
+        // Crypto
+        LABELS.put("BTC-USD",  "Bitcoin");
+        LABELS.put("ETH-USD",  "Ethereum");
+        LABELS.put("SOL-USD",  "Solana");
+        LABELS.put("BNB-USD",  "BNB");
+        LABELS.put("XRP-USD",  "XRP");
+        LABELS.put("DOGE-USD", "Dogecoin");
+        LABELS.put("ADA-USD",  "Cardano");
+        LABELS.put("AVAX-USD", "Avalanche");
+        LABELS.put("LINK-USD", "Chainlink");
+        LABELS.put("DOT-USD",  "Polkadot");
+        // Commodities
+        LABELS.put("GC=F", "Gold");
+        LABELS.put("SI=F", "Silver");
+        LABELS.put("CL=F", "Oil (WTI)");
+        LABELS.put("BZ=F", "Brent");
+        LABELS.put("NG=F", "Nat Gas");
+        LABELS.put("HG=F", "Copper");
+    }
 
-    // Category groupings for the market pulse view
-    private static final Map<String, String> CATEGORIES = Map.ofEntries(
-        Map.entry("^GSPC",   "indices"),
-        Map.entry("^IXIC",   "indices"),
-        Map.entry("^DJI",    "indices"),
-        Map.entry("^RUT",    "indices"),
-        Map.entry("^VIX",    "indices"),
-        Map.entry("^TNX",    "indices"),
-        Map.entry("AAPL",    "equities"),
-        Map.entry("MSFT",    "equities"),
-        Map.entry("NVDA",    "equities"),
-        Map.entry("AMZN",    "equities"),
-        Map.entry("META",    "equities"),
-        Map.entry("GOOGL",   "equities"),
-        Map.entry("TSLA",    "equities"),
-        Map.entry("BRK-B",   "equities"),
-        Map.entry("JPM",     "equities"),
-        Map.entry("V",       "equities"),
-        Map.entry("BTC-USD", "crypto"),
-        Map.entry("ETH-USD", "crypto"),
-        Map.entry("SOL-USD", "crypto"),
-        Map.entry("GC=F",    "commodities"),
-        Map.entry("CL=F",    "commodities"),
-        Map.entry("NG=F",    "commodities"),
-        Map.entry("SI=F",    "commodities")
-    );
+    // ── Category groupings ─────────────────────────────────────────────────────
+    private static final Map<String, String> CATEGORIES;
+    static {
+        CATEGORIES = new LinkedHashMap<>();
+        for (String s : List.of("^GSPC","^IXIC","^DJI","^RUT","^MID","^VIX","^TNX","^SOX",
+                                "^GDAXI","^FTSE","^FCHI","^STOXX50E","^AEX","^IBEX","^SSMI",
+                                "^N225","^HSI","000001.SS","^KS11","^AXJO","^STI","^BSESN",
+                                "^BVSP","^MXX"))                          CATEGORIES.put(s, "indices");
+        for (String s : List.of("XLK","XLF","XLE","XLV","XLY","XLI","XLC","XLB","XLU","XLRE"))
+                                                                          CATEGORIES.put(s, "sectors");
+        for (String s : List.of("AAPL","MSFT","NVDA","AMZN","META","GOOGL","TSLA","BRK-B",
+                                "JPM","V","UNH","XOM","JNJ","WMT","MA","PG","ORCL","NFLX"))
+                                                                          CATEGORIES.put(s, "equities");
+        for (String s : List.of("BTC-USD","ETH-USD","SOL-USD","BNB-USD","XRP-USD","DOGE-USD",
+                                "ADA-USD","AVAX-USD","LINK-USD","DOT-USD"))
+                                                                          CATEGORIES.put(s, "crypto");
+        for (String s : List.of("GC=F","SI=F","CL=F","BZ=F","NG=F","HG=F"))
+                                                                          CATEGORIES.put(s, "commodities");
+    }
 
     @GetMapping("/overview")
-    @Operation(summary = "Multi-market overview strip",
-               description = "Returns quotes for S&P 500, Nasdaq, Dow, Russell 2000, VIX, 10Y Yield, Bitcoin, Ethereum, Gold, and Oil. Cached 60s.")
+    @Operation(summary = "Full global market overview",
+               description = "Returns quotes grouped by: global indices, sector ETFs, mega-cap equities, crypto, commodities. Cached 60s.")
     @Cacheable("markets")
     public ApiResponse<List<Map<String, Object>>> getOverview() {
         List<Map<String, Object>> results = new ArrayList<>();
@@ -107,7 +166,7 @@ public class MarketsController {
                 item.put("changePercent", q.getChangePercent());
                 item.put("currency",      q.getCurrency());
                 results.add(item);
-            } catch (Exception e) {
+            } catch (Exception ignored) {
                 // Skip failed symbols — overview should never crash
             }
         }
