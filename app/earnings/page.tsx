@@ -31,6 +31,10 @@ interface EarningsSetup {
   beatCount: number | null
   avgSurprisePct: number | null
   error: string | null
+  alreadyReported: boolean
+  reportedEps: number | null
+  epsSurprise: number | null
+  epsSurprisePct: number | null
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -197,12 +201,18 @@ function SetupCard({ s }: { s: EarningsSetup }) {
                 {fmtCap(s.marketCap)}
               </span>
             )}
+            {s.alreadyReported && (
+              <span className="text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full
+                               bg-slate-700 text-slate-400 border border-slate-600">
+                Reported
+              </span>
+            )}
           </div>
           <div className="text-[11px] text-slate-500 mt-0.5 truncate">{shortName(s.name)}</div>
         </div>
         <div className="text-right shrink-0">
           <div className="text-[11px] text-slate-400 font-semibold">{fmtDate(s.reportDate)}</div>
-          {s.reportTime && (
+          {s.reportTime && !s.alreadyReported && (
             <div className={`text-[9px] mt-0.5 ${s.reportTime === 'Pre-Market' ? 'text-sky-500' : 'text-orange-400'}`}>
               {s.reportTime}
             </div>
@@ -210,54 +220,112 @@ function SetupCard({ s }: { s: EarningsSetup }) {
         </div>
       </div>
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-3 gap-1.5">
-
-        {/* Price */}
-        <div className="bg-slate-800/40 rounded-xl p-2.5">
-          <div className="text-[9px] text-slate-600 uppercase tracking-widest mb-1">Price</div>
-          <div className={`font-mono font-bold text-sm ${s.currentPrice > 0 ? 'text-slate-100' : 'text-slate-600'}`}>
-            {s.currentPrice > 0 ? `$${fmtPrice(s.currentPrice)}` : '—'}
+      {/* Beat/miss banner for reported companies */}
+      {s.alreadyReported && s.reportedEps != null && (
+        <div className={`rounded-xl px-3 py-2 flex items-center justify-between
+          ${s.epsSurprisePct != null && s.epsSurprisePct > 0
+            ? 'bg-emerald-500/10 border border-emerald-500/20'
+            : s.epsSurprisePct != null && s.epsSurprisePct < 0
+            ? 'bg-red-500/10 border border-red-500/20'
+            : 'bg-slate-800/40 border border-slate-700/40'}`}
+        >
+          <div>
+            <div className="text-[9px] text-slate-600 uppercase tracking-widest mb-0.5">Reported EPS</div>
+            <div className={`font-mono font-bold text-base ${
+              s.epsSurprisePct != null && s.epsSurprisePct > 0 ? 'text-emerald-400' :
+              s.epsSurprisePct != null && s.epsSurprisePct < 0 ? 'text-red-400' : 'text-slate-200'
+            }`}>
+              ${s.reportedEps.toFixed(2)}
+            </div>
+            {s.epsEstimate != null && (
+              <div className="text-[10px] text-slate-600">est. ${s.epsEstimate.toFixed(2)}</div>
+            )}
           </div>
-          {s.currentPrice > 0 && (
+          {s.epsSurprisePct != null && (
+            <div className={`text-right`}>
+              <div className={`font-mono font-bold text-sm ${
+                s.epsSurprisePct > 0 ? 'text-emerald-400' : 'text-red-400'
+              }`}>
+                {s.epsSurprisePct > 0 ? '▲ Beat' : '▼ Miss'}
+              </div>
+              <div className={`font-mono text-[10px] ${s.epsSurprisePct > 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                {s.epsSurprisePct > 0 ? '+' : ''}{s.epsSurprisePct.toFixed(1)}%
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Stats grid — only for upcoming companies */}
+      {!s.alreadyReported && (
+        <div className="grid grid-cols-3 gap-1.5">
+
+          {/* Price */}
+          <div className="bg-slate-800/40 rounded-xl p-2.5">
+            <div className="text-[9px] text-slate-600 uppercase tracking-widest mb-1">Price</div>
+            <div className={`font-mono font-bold text-sm ${s.currentPrice > 0 ? 'text-slate-100' : 'text-slate-600'}`}>
+              {s.currentPrice > 0 ? `$${fmtPrice(s.currentPrice)}` : '—'}
+            </div>
+            {s.currentPrice > 0 && (
+              <div className={`font-mono text-[10px] ${col}`}>{sign}{s.changePercent.toFixed(2)}%</div>
+            )}
+          </div>
+
+          {/* Expected move */}
+          <div className={`rounded-xl p-2.5 ${s.expectedMovePercent != null ? 'bg-slate-800/60' : 'bg-slate-800/30'}`}>
+            <div className="text-[9px] text-slate-600 uppercase tracking-widest mb-1">Exp. Move</div>
+            {s.expectedMovePercent != null ? (
+              <>
+                <div className={`font-mono font-bold text-sm ${moveColor}`}>
+                  ±{s.expectedMovePercent.toFixed(1)}%
+                </div>
+                {s.atmIv != null && s.atmIv > 0 && (
+                  <div className="text-[10px] text-slate-600">IV {(s.atmIv * 100).toFixed(0)}%</div>
+                )}
+              </>
+            ) : (
+              <div className="text-sm text-slate-700 font-mono">—</div>
+            )}
+          </div>
+
+          {/* EPS estimate */}
+          <div className="bg-slate-800/40 rounded-xl p-2.5">
+            <div className="text-[9px] text-slate-600 uppercase tracking-widest mb-1">EPS Est.</div>
+            {s.epsEstimate != null ? (
+              <>
+                <div className="font-mono font-bold text-sm text-slate-100">
+                  {s.epsEstimate.toFixed(2)}
+                </div>
+                {s.lastYearEps != null && (
+                  <div className="text-[10px] text-slate-600">vs {s.lastYearEps.toFixed(2)} LY</div>
+                )}
+              </>
+            ) : (
+              <div className="text-sm text-slate-700 font-mono">—</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Price + EPS for reported companies (compact) */}
+      {s.alreadyReported && s.currentPrice > 0 && (
+        <div className="grid grid-cols-2 gap-1.5">
+          <div className="bg-slate-800/30 rounded-xl p-2.5">
+            <div className="text-[9px] text-slate-600 uppercase tracking-widest mb-1">Price</div>
+            <div className="font-mono font-bold text-sm text-slate-100">${fmtPrice(s.currentPrice)}</div>
             <div className={`font-mono text-[10px] ${col}`}>{sign}{s.changePercent.toFixed(2)}%</div>
-          )}
+          </div>
+          <div className="bg-slate-800/30 rounded-xl p-2.5">
+            <div className="text-[9px] text-slate-600 uppercase tracking-widest mb-1">EPS Estimate</div>
+            <div className="font-mono font-bold text-sm text-slate-400">
+              {s.epsEstimate != null ? `$${s.epsEstimate.toFixed(2)}` : '—'}
+            </div>
+            {s.lastYearEps != null && (
+              <div className="text-[10px] text-slate-600">LY ${s.lastYearEps.toFixed(2)}</div>
+            )}
+          </div>
         </div>
-
-        {/* Expected move */}
-        <div className={`rounded-xl p-2.5 ${s.expectedMovePercent != null ? 'bg-slate-800/60' : 'bg-slate-800/30'}`}>
-          <div className="text-[9px] text-slate-600 uppercase tracking-widest mb-1">Exp. Move</div>
-          {s.expectedMovePercent != null ? (
-            <>
-              <div className={`font-mono font-bold text-sm ${moveColor}`}>
-                ±{s.expectedMovePercent.toFixed(1)}%
-              </div>
-              {s.atmIv != null && s.atmIv > 0 && (
-                <div className="text-[10px] text-slate-600">IV {(s.atmIv * 100).toFixed(0)}%</div>
-              )}
-            </>
-          ) : (
-            <div className="text-sm text-slate-700 font-mono">—</div>
-          )}
-        </div>
-
-        {/* EPS estimate */}
-        <div className="bg-slate-800/40 rounded-xl p-2.5">
-          <div className="text-[9px] text-slate-600 uppercase tracking-widest mb-1">EPS Est.</div>
-          {s.epsEstimate != null ? (
-            <>
-              <div className="font-mono font-bold text-sm text-slate-100">
-                {s.epsEstimate >= 0 ? '' : ''}{s.epsEstimate.toFixed(2)}
-              </div>
-              {s.lastYearEps != null && (
-                <div className="text-[10px] text-slate-600">vs {s.lastYearEps.toFixed(2)} LY</div>
-              )}
-            </>
-          ) : (
-            <div className="text-sm text-slate-700 font-mono">—</div>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Beat history — lazy */}
       <HistoryPanel symbol={s.symbol} />

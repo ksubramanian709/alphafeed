@@ -41,9 +41,21 @@ public class EarningsService {
         "https://api.nasdaq.com/api/calendar/earnings?date=%s";
 
     // ─── Earnings history (per symbol) ───────────────────────────────────────────
+    // Yahoo Finance is tried first (instant, no rate limit). Alpha Vantage is fallback for deeper history.
 
     @Cacheable(value = "earnings", key = "#symbol.toUpperCase()", unless = "#result.error != null")
     public EarningsHistory getEarningsHistory(String symbol) {
+        // 1. Try Yahoo Finance first — real-time, no API key, updates as soon as earnings drop
+        EarningsHistory yahooResult = getEarningsFromYahoo(symbol);
+        if (yahooResult.getError() == null
+                && yahooResult.getQuarterlyEarnings() != null
+                && yahooResult.getQuarterlyEarnings().size() >= 2) {
+            log.info("Earnings history for {} from Yahoo Finance ({} quarters)",
+                     symbol, yahooResult.getQuarterlyEarnings().size());
+            return yahooResult;
+        }
+
+        // 2. Fall back to Alpha Vantage for deeper history
         try {
             String url = UriComponentsBuilder.fromHttpUrl(BASE)
                     .queryParam("function", "EARNINGS")
@@ -62,6 +74,10 @@ public class EarningsService {
                 Object msgObj = body.containsKey("Information") ? body.get("Information") : body.get("Note");
                 String msg = msgObj != null ? msgObj.toString() : "rate limit";
                 log.warn("Alpha Vantage earnings limit for {}: {}", symbol, msg);
+                // Return Yahoo partial data rather than error when AV is rate-limited
+                if (yahooResult.getQuarterlyEarnings() != null && !yahooResult.getQuarterlyEarnings().isEmpty()) {
+                    return yahooResult;
+                }
                 return EarningsHistory.builder().symbol(symbol).error("API rate limit reached").build();
             }
 
@@ -89,6 +105,97 @@ public class EarningsService {
         } catch (Exception e) {
             log.error("Failed to fetch earnings history for {}: {}", symbol, e.getMessage());
             return EarningsHistory.builder().symbol(symbol).error(e.getMessage()).build();
+        }
+    }
+
+    /**
+     * Fetch earnings history from Yahoo Finance quoteSummary earnings module.
+     * Real-time, no API key, updates immediately when earnings are released.
+     */
+    public EarningsHistory getEarningsFromYahoo(String symbol) {
+        try {
+            String url = "https://query1.finance.yahoo.com/v10/finance/quoteSummary/"
+                       + symbol.toUpperCase() + "?modules=earnings";
+            HttpHeaders headers = new HttpHeaders();
+            headers.set(HttpHeaders.USER_AGENT, "Mozilla/5.0 (compatible)");
+            headers.set(HttpHeaders.ACCEPT, "application/json");
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+            ResponseEntity<YahooEarningsResp> resp = restTemplate.exchange(
+                    url, HttpMethod.GET, entity, YahooEarningsResp.class);
+
+            if (resp.getBody() == null || resp.getBody().getQuoteSummary() == null) {
+                return EarningsHistory.builder().symbol(symbol).error("No Yahoo data").build();
+            }
+            List<YahooEarningsResult> results = resp.getBody().getQuoteSummary().getResult();
+            if (results == null || results.isEmpty()) {
+                return EarningsHistory.builder().symbol(symbol).error("No Yahoo results").build();
+            }
+            YahooEarningsModule earningsMod = results.get(0).getEarnings();
+            if (earningsMod == null || earningsMod.getEarningsChart() == null) {
+                return EarningsHistory.builder().symbol(symbol).error("No earnings chart").build();
+            }
+            List<YahooQuarterlyEarning> quarters = earningsMod.getEarningsChart().getQuarterly();
+            if (quarters == null || quarters.isEmpty()) {
+                return EarningsHistory.builder().symbol(symbol).error("No quarterly data").build();
+            }
+
+            // Yahoo returns most recent first; convert quarter label to ISO date
+            List<QuarterlyEarning> out = new ArrayList<>();
+            for (YahooQuarterlyEarning q : quarters) {
+                Double reported  = q.getActual()   != null ? q.getActual().getRaw()   : null;
+                Double estimated = q.getEstimate()  != null ? q.getEstimate().getRaw() : null;
+                Double surprise  = (reported != null && estimated != null) ? reported - estimated : null;
+                Double surprisePct = (surprise != null && estimated != null && estimated != 0)
+                                   ? (surprise / Math.abs(estimated)) * 100 : null;
+
+                out.add(QuarterlyEarning.builder()
+                        .fiscalDateEnding(yahooQuarterToDate(q.getDate()))
+                        .reportedDate(null)
+                        .reportedEps(reported)
+                        .estimatedEps(estimated)
+                        .surprise(surprise)
+                        .surprisePercentage(surprisePct)
+                        .build());
+            }
+
+            return EarningsHistory.builder().symbol(symbol).quarterlyEarnings(out).build();
+
+        } catch (Exception e) {
+            log.debug("Yahoo earnings fetch failed for {}: {}", symbol, e.getMessage());
+            return EarningsHistory.builder().symbol(symbol).error(e.getMessage()).build();
+        }
+    }
+
+    /** Convert Yahoo quarter label "1Q2025" → "2025-03-31" */
+    private String yahooQuarterToDate(String label) {
+        if (label == null || label.length() < 6) return label;
+        try {
+            int q    = Integer.parseInt(label.substring(0, 1));
+            int year = Integer.parseInt(label.substring(2));
+            String[] endMonths = { "03-31", "06-30", "09-30", "12-31" };
+            return year + "-" + endMonths[Math.min(q - 1, 3)];
+        } catch (Exception e) {
+            return label;
+        }
+    }
+
+    /** Fetch the most recently reported quarter's EPS from Yahoo Finance.
+     *  Returns [reportedEps, surprise, surprisePct] or null if unavailable. */
+    private double[] fetchLatestReportedEps(String symbol) {
+        try {
+            EarningsHistory h = getEarningsFromYahoo(symbol);
+            if (h.getError() != null || h.getQuarterlyEarnings() == null || h.getQuarterlyEarnings().isEmpty()) {
+                return null;
+            }
+            QuarterlyEarning latest = h.getQuarterlyEarnings().get(0);
+            if (latest.getReportedEps() == null) return null;
+            double reported    = latest.getReportedEps();
+            double surprise    = latest.getSurprise()    != null ? latest.getSurprise()    : 0;
+            double surprisePct = latest.getSurprisePercentage() != null ? latest.getSurprisePercentage() : 0;
+            return new double[]{ reported, surprise, surprisePct };
+        } catch (Exception e) {
+            return null;
         }
     }
 
@@ -147,15 +254,16 @@ public class EarningsService {
     public List<EarningsSetup> getWeeklySetups() {
         List<EarningsCalendarItem> calendar = getEarningsCalendar();
 
-        // Next 14 calendar days — wide enough to always have data
+        // Past 7 days + next 14 days — show what already happened this week AND what's coming
         LocalDate today  = LocalDate.now(ZoneId.of("America/New_York"));
+        LocalDate since  = today.minusDays(7);
         LocalDate cutoff = today.plusDays(14);
 
         List<EarningsCalendarItem> upcoming = calendar.stream()
             .filter(item -> {
                 try {
                     LocalDate d = LocalDate.parse(item.getReportDate());
-                    return !d.isBefore(today) && !d.isAfter(cutoff);
+                    return !d.isBefore(since) && !d.isAfter(cutoff);
                 } catch (Exception e) { return false; }
             })
             .sorted(Comparator.comparingLong(
@@ -197,6 +305,12 @@ public class EarningsService {
     private EarningsSetup buildSetupFast(EarningsCalendarItem item) {
         String symbol = item.getSymbol();
         try {
+            LocalDate today       = LocalDate.now(ZoneId.of("America/New_York"));
+            LocalDate reportDate  = LocalDate.parse(item.getReportDate());
+            // Considered reported if the date has passed, or it's today and pre-market
+            boolean alreadyReported = reportDate.isBefore(today)
+                || (reportDate.equals(today) && "Pre-Market".equals(item.getReportTime()));
+
             // 1. Current quote
             ApiResponse<Quote> qr = quoteService.getQuote(symbol);
             Quote quote = qr.getData();
@@ -205,13 +319,26 @@ public class EarningsService {
             long   mktCap    = item.getMarketCap() != null ? item.getMarketCap()
                              : (quote != null ? quote.getMarketCap() : 0L);
 
-            // 2. Options-implied expected move — try MarketData.app first, fall back to Yahoo Finance
+            // 2. For already-reported companies: fetch actual EPS from Yahoo Finance immediately
+            Double reportedEps    = null;
+            Double epsSurprise    = null;
+            Double epsSurprisePct = null;
+            if (alreadyReported) {
+                double[] actual = fetchLatestReportedEps(symbol);
+                if (actual != null) {
+                    reportedEps    = actual[0];
+                    epsSurprise    = actual[1];
+                    epsSurprisePct = actual[2];
+                }
+            }
+
+            // 3. Options-implied expected move — try MarketData.app first, fall back to Yahoo Finance
             Double expectedMove = null;
             Double atmIv        = null;
-            if (price > 0) {
+            if (price > 0 && !alreadyReported) {
+                // Only calculate expected move for upcoming earnings (past earnings don't need it)
                 expectedMove = calcExpectedMove(symbol, item.getReportDate(), price);
                 atmIv        = calcAtmIv(symbol, item.getReportDate(), price);
-                // If MarketData.app is not configured or returned null, use Yahoo Finance options
                 if (expectedMove == null) {
                     double[] yahooMove = calcExpectedMoveFromYahoo(symbol, item.getReportDate(), price);
                     if (yahooMove != null) {
@@ -234,7 +361,10 @@ public class EarningsService {
                 .marketCap(mktCap)
                 .expectedMovePercent(expectedMove)
                 .atmIv(atmIv)
-                // history intentionally empty — loaded lazily
+                .alreadyReported(alreadyReported)
+                .reportedEps(reportedEps)
+                .epsSurprise(epsSurprise)
+                .epsSurprisePct(epsSurprisePct)
                 .history(List.of())
                 .beatCount(null)
                 .avgSurprisePct(null)
@@ -328,7 +458,8 @@ public class EarningsService {
         HttpEntity<Void> entity = new HttpEntity<>(headers);
 
         int tradingDaysFetched = 0;
-        for (int offset = 0; offset <= 21 && tradingDaysFetched < 14; offset++) {
+        // Start 10 calendar days back to capture the past week's reporters
+        for (int offset = -10; offset <= 21 && tradingDaysFetched < 21; offset++) {
             LocalDate date = today.plusDays(offset);
             DayOfWeek dow = date.getDayOfWeek();
             if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) continue;
@@ -563,6 +694,49 @@ public class EarningsService {
         @JsonProperty("lastYearEPS")   private String lastYearEPS;
         private String time;
         @JsonProperty("noOfEst")      private String noOfEst;
+    }
+
+    // ─── Yahoo Finance Earnings DTOs ─────────────────────────────────────────────
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    static class YahooEarningsResp {
+        @JsonProperty("quoteSummary")
+        private YahooQuoteSummaryE quoteSummary;
+    }
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    static class YahooQuoteSummaryE {
+        private List<YahooEarningsResult> result;
+    }
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    static class YahooEarningsResult {
+        private YahooEarningsModule earnings;
+    }
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    static class YahooEarningsModule {
+        private YahooEarningsChart earningsChart;
+    }
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    static class YahooEarningsChart {
+        private List<YahooQuarterlyEarning> quarterly;
+        private YahooRawValue currentQuarterEstimate;
+        private String currentQuarterEstimateDate;
+    }
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    static class YahooQuarterlyEarning {
+        private String date;          // "1Q2025"
+        private YahooRawValue actual;
+        private YahooRawValue estimate;
+    }
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    static class YahooRawValue {
+        private double raw;
+        private String fmt;
     }
 
     // ─── Yahoo Finance Options DTOs ───────────────────────────────────────────────

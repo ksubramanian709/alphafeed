@@ -47,6 +47,10 @@ interface EarningsSetup {
   currentPrice: number
   changePercent: number
   marketCap: number
+  alreadyReported: boolean
+  reportedEps: number | null
+  epsSurprise: number | null
+  epsSurprisePct: number | null
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -388,7 +392,11 @@ export default function EarningsSymbolPage() {
                 {/* Date / time */}
                 <div className="flex items-center gap-3 mb-5 flex-wrap">
                   <div className="text-slate-200 font-semibold">{fmtDate(setup.reportDate)}</div>
-                  {setup.reportTime && (
+                  {setup.alreadyReported ? (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full border text-slate-400 border-slate-600 bg-slate-800">
+                      Results In
+                    </span>
+                  ) : setup.reportTime && (
                     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${
                       setup.reportTime === 'Pre-Market'
                         ? 'text-sky-400 border-sky-500/30 bg-sky-500/10'
@@ -399,28 +407,72 @@ export default function EarningsSymbolPage() {
                   )}
                 </div>
 
+                {/* REPORTED: Beat/miss result banner */}
+                {setup.alreadyReported && setup.reportedEps != null && (
+                  <div className={`rounded-xl p-4 mb-4 flex items-center justify-between
+                    ${(setup.epsSurprisePct ?? 0) > 0
+                      ? 'bg-emerald-500/10 border border-emerald-500/25'
+                      : 'bg-red-500/10 border border-red-500/25'}`}
+                  >
+                    <div>
+                      <div className="text-[9px] text-slate-500 uppercase tracking-widest mb-1">Reported EPS</div>
+                      <div className={`font-mono font-bold text-3xl ${
+                        (setup.epsSurprisePct ?? 0) > 0 ? 'text-emerald-400' : 'text-red-400'
+                      }`}>
+                        ${setup.reportedEps.toFixed(2)}
+                      </div>
+                      {setup.epsEstimate != null && (
+                        <div className="text-sm text-slate-500 mt-0.5">
+                          vs est. ${setup.epsEstimate.toFixed(2)}
+                        </div>
+                      )}
+                    </div>
+                    {setup.epsSurprisePct != null && (
+                      <div className="text-right">
+                        <div className={`font-bold text-xl ${
+                          setup.epsSurprisePct > 0 ? 'text-emerald-400' : 'text-red-400'
+                        }`}>
+                          {setup.epsSurprisePct > 0 ? '▲ Beat' : '▼ Miss'}
+                        </div>
+                        <div className={`font-mono text-sm mt-0.5 ${
+                          setup.epsSurprisePct > 0 ? 'text-emerald-500' : 'text-red-500'
+                        }`}>
+                          {setup.epsSurprisePct > 0 ? '+' : ''}{setup.epsSurprisePct.toFixed(1)}%
+                        </div>
+                        {setup.epsSurprise != null && (
+                          <div className="text-[10px] text-slate-600 mt-0.5">
+                            {setup.epsSurprise > 0 ? '+' : ''}${setup.epsSurprise.toFixed(2)} vs est
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Stat grid */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
 
-                  {/* Expected move */}
-                  <div className="bg-slate-800/60 rounded-xl p-3 sm:col-span-1">
-                    <div className="text-[9px] text-slate-600 uppercase tracking-widest mb-1">Exp. Move</div>
-                    {setup.expectedMovePercent != null ? (
-                      <>
-                        <div className={`font-mono font-bold text-2xl ${moveColor}`}>
-                          ±{setup.expectedMovePercent.toFixed(1)}%
-                        </div>
-                        {setup.atmIv != null && setup.atmIv > 0 && (
-                          <div className="text-[10px] text-slate-600 mt-0.5">
-                            ATM IV {(setup.atmIv * 100).toFixed(0)}%
+                  {/* Expected move — only for upcoming */}
+                  {!setup.alreadyReported && (
+                    <div className="bg-slate-800/60 rounded-xl p-3 sm:col-span-1">
+                      <div className="text-[9px] text-slate-600 uppercase tracking-widest mb-1">Exp. Move</div>
+                      {setup.expectedMovePercent != null ? (
+                        <>
+                          <div className={`font-mono font-bold text-2xl ${moveColor}`}>
+                            ±{setup.expectedMovePercent.toFixed(1)}%
                           </div>
-                        )}
-                        <div className="text-[9px] text-slate-700 mt-1">Options-implied straddle</div>
-                      </>
-                    ) : (
-                      <div className="text-slate-700 font-mono text-lg">—</div>
-                    )}
-                  </div>
+                          {setup.atmIv != null && setup.atmIv > 0 && (
+                            <div className="text-[10px] text-slate-600 mt-0.5">
+                              ATM IV {(setup.atmIv * 100).toFixed(0)}%
+                            </div>
+                          )}
+                          <div className="text-[9px] text-slate-700 mt-1">Options-implied straddle</div>
+                        </>
+                      ) : (
+                        <div className="text-slate-700 font-mono text-lg">—</div>
+                      )}
+                    </div>
+                  )}
 
                   {/* EPS estimate */}
                   <div className="bg-slate-800/40 rounded-xl p-3">
@@ -482,8 +534,8 @@ export default function EarningsSymbolPage() {
                   )}
                 </div>
 
-                {/* Expected move context bar */}
-                {setup.expectedMovePercent != null && quote && (
+                {/* Expected move context bar — only for upcoming */}
+                {!setup.alreadyReported && setup.expectedMovePercent != null && quote && (
                   <div className="bg-slate-800/30 rounded-xl p-3">
                     <div className="text-[9px] text-slate-600 uppercase tracking-widest mb-2">
                       Price Range Implied by Options

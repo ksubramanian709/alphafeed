@@ -33,4 +33,12 @@ public class EarningsSetup {
     private Double  avgSurprisePct;    // average surprise % last 4
 
     private String error;
+
+    // True when reportDate <= today (report has already occurred or is today)
+    private boolean alreadyReported;
+
+    // Populated from Yahoo Finance immediately after earnings are released
+    private Double reportedEps;       // actual EPS reported
+    private Double epsSurprise;       // reported - estimated
+    private Double epsSurprisePct;    // (reported - estimated) / |estimated| * 100
 }

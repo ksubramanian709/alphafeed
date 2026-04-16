@@ -53,17 +53,17 @@ public class CacheConfig {
         manager.registerCustomCache("suggestions",
                 Caffeine.newBuilder().expireAfterWrite(4, TimeUnit.HOURS).maximumSize(1).build());
 
-        // Earnings history per symbol — quarterly data, cache 1 hour
+        // Earnings history per symbol — short TTL so newly reported data shows immediately
         manager.registerCustomCache("earnings",
-                Caffeine.newBuilder().expireAfterWrite(1, TimeUnit.HOURS).maximumSize(300).build());
+                Caffeine.newBuilder().expireAfterWrite(15, TimeUnit.MINUTES).maximumSize(300).build());
 
-        // Earnings decision engine — weekly setups with options expected move
+        // Earnings decision engine — refresh often during active earnings weeks
         manager.registerCustomCache("earnings-setups",
-                Caffeine.newBuilder().expireAfterWrite(30, TimeUnit.MINUTES).maximumSize(5).build());
+                Caffeine.newBuilder().expireAfterWrite(10, TimeUnit.MINUTES).maximumSize(5).build());
 
-        // Upcoming earnings calendar — refresh every 30 minutes
+        // Upcoming earnings calendar — refresh every 15 minutes
         manager.registerCustomCache("earnings-calendar",
-                Caffeine.newBuilder().expireAfterWrite(30, TimeUnit.MINUTES).maximumSize(1).build());
+                Caffeine.newBuilder().expireAfterWrite(15, TimeUnit.MINUTES).maximumSize(1).build());
 
         // Screener universe — full set of fundamentals, cached 1 hour
         manager.registerCustomCache("screener-universe",
