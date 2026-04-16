@@ -205,9 +205,21 @@ public class EarningsService {
             long   mktCap    = item.getMarketCap() != null ? item.getMarketCap()
                              : (quote != null ? quote.getMarketCap() : 0L);
 
-            // 2. Options-implied expected move (no API key required — Yahoo Finance)
-            Double expectedMove = price > 0 ? calcExpectedMove(symbol, item.getReportDate(), price) : null;
-            Double atmIv        = price > 0 ? calcAtmIv(symbol, item.getReportDate(), price) : null;
+            // 2. Options-implied expected move — try MarketData.app first, fall back to Yahoo Finance
+            Double expectedMove = null;
+            Double atmIv        = null;
+            if (price > 0) {
+                expectedMove = calcExpectedMove(symbol, item.getReportDate(), price);
+                atmIv        = calcAtmIv(symbol, item.getReportDate(), price);
+                // If MarketData.app is not configured or returned null, use Yahoo Finance options
+                if (expectedMove == null) {
+                    double[] yahooMove = calcExpectedMoveFromYahoo(symbol, item.getReportDate(), price);
+                    if (yahooMove != null) {
+                        expectedMove = yahooMove[0];
+                        atmIv        = yahooMove[1];
+                    }
+                }
+            }
 
             return EarningsSetup.builder()
                 .symbol(symbol)
@@ -453,6 +465,81 @@ public class EarningsService {
         catch (NumberFormatException e) { return null; }
     }
 
+    // ─── Yahoo Finance options expected move fallback ─────────────────────────────
+
+    /**
+     * Fetches the ATM straddle expected move from Yahoo Finance public options API.
+     * No API key required. Returns [expectedMovePercent, atmIv] or null on failure.
+     */
+    private double[] calcExpectedMoveFromYahoo(String symbol, String earningsDate, double stockPrice) {
+        try {
+            LocalDate ed = LocalDate.parse(earningsDate);
+            long earningsEpoch = ed.atStartOfDay(ZoneOffset.UTC).toEpochSecond();
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.set(HttpHeaders.USER_AGENT, "Mozilla/5.0 (compatible)");
+            headers.set(HttpHeaders.ACCEPT, "application/json");
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+            // First call: get list of expiration dates
+            String baseUrl = "https://query2.finance.yahoo.com/v7/finance/options/" + symbol.toUpperCase();
+            ResponseEntity<YahooOptionsResp> baseResp = restTemplate.exchange(
+                    baseUrl, HttpMethod.GET, entity, YahooOptionsResp.class);
+
+            if (baseResp.getBody() == null || baseResp.getBody().getOptionChain() == null) return null;
+            List<YahooOptionsResult> baseResults = baseResp.getBody().getOptionChain().getResult();
+            if (baseResults == null || baseResults.isEmpty()) return null;
+
+            YahooOptionsResult baseResult = baseResults.get(0);
+            List<Long> expDates = baseResult.getExpirationDates();
+            if (expDates == null || expDates.isEmpty()) return null;
+
+            // Find nearest expiration on or after earnings date
+            Long targetExp = expDates.stream()
+                    .filter(e -> e >= earningsEpoch)
+                    .min(Long::compareTo)
+                    .orElse(expDates.get(0));
+
+            // Second call: fetch the chain for that specific expiration
+            String expUrl = baseUrl + "?date=" + targetExp;
+            ResponseEntity<YahooOptionsResp> resp = restTemplate.exchange(
+                    expUrl, HttpMethod.GET, entity, YahooOptionsResp.class);
+
+            if (resp.getBody() == null || resp.getBody().getOptionChain() == null) return null;
+            List<YahooOptionsResult> results = resp.getBody().getOptionChain().getResult();
+            if (results == null || results.isEmpty()) return null;
+
+            YahooOptionsResult result = results.get(0);
+            if (result.getOptions() == null || result.getOptions().isEmpty()) return null;
+
+            YahooOptionsData opts = result.getOptions().get(0);
+            List<YahooContract> calls = opts.getCalls();
+            List<YahooContract> puts  = opts.getPuts();
+            if (calls == null || puts == null || calls.isEmpty() || puts.isEmpty()) return null;
+
+            YahooContract atmCall = calls.stream()
+                    .min(Comparator.comparingDouble(c -> Math.abs(c.getStrike() - stockPrice)))
+                    .orElse(null);
+            YahooContract atmPut = puts.stream()
+                    .min(Comparator.comparingDouble(p -> Math.abs(p.getStrike() - stockPrice)))
+                    .orElse(null);
+
+            if (atmCall == null || atmPut == null) return null;
+
+            double callPrice = atmCall.getBid() > 0.01 ? atmCall.getBid() : atmCall.getLastPrice();
+            double putPrice  = atmPut.getBid()  > 0.01 ? atmPut.getBid()  : atmPut.getLastPrice();
+            if (callPrice <= 0 || putPrice <= 0) return null;
+
+            double move = Math.round(((callPrice + putPrice) / stockPrice * 100.0) * 10.0) / 10.0;
+            double iv   = atmCall.getImpliedVolatility();
+            return new double[]{ move, iv > 0 ? iv : 0 };
+
+        } catch (Exception e) {
+            log.debug("Yahoo options fallback failed for {}: {}", symbol, e.getMessage());
+            return null;
+        }
+    }
+
     // ─── Nasdaq DTOs ─────────────────────────────────────────────────────────────
 
     @Data @JsonIgnoreProperties(ignoreUnknown = true)
@@ -476,5 +563,49 @@ public class EarningsService {
         @JsonProperty("lastYearEPS")   private String lastYearEPS;
         private String time;
         @JsonProperty("noOfEst")      private String noOfEst;
+    }
+
+    // ─── Yahoo Finance Options DTOs ───────────────────────────────────────────────
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    static class YahooOptionsResp {
+        private YahooOptionChain optionChain;
+    }
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    static class YahooOptionChain {
+        private List<YahooOptionsResult> result;
+        private Object error;
+    }
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    static class YahooOptionsResult {
+        private String       underlyingSymbol;
+        private List<Long>   expirationDates;
+        private List<YahooOptionsData> options;
+        private YahooOptionsQuote quote;
+    }
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    static class YahooOptionsQuote {
+        private double regularMarketPrice;
+    }
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    static class YahooOptionsData {
+        private long expirationDate;
+        private List<YahooContract> calls;
+        private List<YahooContract> puts;
+    }
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    static class YahooContract {
+        private double strike;
+        private double bid;
+        private double ask;
+        private double lastPrice;
+        private double impliedVolatility;
+        private long   volume;
+        private long   openInterest;
     }
 }

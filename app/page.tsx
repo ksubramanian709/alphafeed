@@ -8,7 +8,6 @@ import CommodityDashboard from './components/CommodityDashboard'
 import CryptoPanel from './components/CryptoPanel'
 import MacroIndicators from './components/MacroIndicators'
 import Watchlist from './components/Watchlist'
-import EarningsCalendar from './components/EarningsCalendar'
 import AgentChat from './components/AgentChat'
 
 export default function Home() {
@@ -112,7 +111,7 @@ export default function Home() {
                   Decision Engine
                 </span>
               </div>
-              <h2 className="text-xl font-bold text-slate-100 mb-1">Earnings This Week</h2>
+              <h2 className="text-xl font-bold text-slate-100 mb-1">Earnings</h2>
               <p className="text-sm text-slate-400 max-w-md">
                 Options-implied expected move, beat/miss history, EPS estimates, and AI read — for every major earnings report this week.
               </p>
@@ -139,10 +138,9 @@ export default function Home() {
       {/* ── Main 2-column grid ──────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* Left: news + earnings */}
+        {/* Left: news */}
         <div className="lg:col-span-2 space-y-6">
           <DailyBriefing />
-          <EarningsCalendar />
         </div>
 
         {/* Right: watchlist + agent */}
