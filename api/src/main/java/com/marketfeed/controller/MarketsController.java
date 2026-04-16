@@ -11,6 +11,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.*;
+import java.util.stream.Collectors;
+import java.util.Objects;
 
 @RestController
 @RequestMapping("/v1/markets")
@@ -149,27 +152,39 @@ public class MarketsController {
                description = "Returns quotes grouped by: global indices, sector ETFs, mega-cap equities, crypto, commodities. Cached 60s.")
     @Cacheable("markets")
     public ApiResponse<List<Map<String, Object>>> getOverview() {
-        List<Map<String, Object>> results = new ArrayList<>();
+        ExecutorService exec = Executors.newVirtualThreadPerTaskExecutor();
 
-        for (String symbol : OVERVIEW_SYMBOLS) {
-            try {
-                ApiResponse<Quote> r = quoteService.getQuote(symbol);
-                if (r.getData() == null) continue;
-                Quote q = r.getData();
+        List<CompletableFuture<Map<String, Object>>> futures = OVERVIEW_SYMBOLS.stream()
+            .map(symbol -> CompletableFuture.supplyAsync(() -> {
+                try {
+                    ApiResponse<Quote> r = quoteService.getQuote(symbol);
+                    if (r.getData() == null) return null;
+                    Quote q = r.getData();
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("symbol",        symbol);
+                    item.put("label",         LABELS.getOrDefault(symbol, symbol));
+                    item.put("category",      CATEGORIES.getOrDefault(symbol, "equities"));
+                    item.put("price",         q.getPrice());
+                    item.put("change",        q.getChange());
+                    item.put("changePercent", q.getChangePercent());
+                    item.put("currency",      q.getCurrency());
+                    return item;
+                } catch (Exception e) {
+                    return null;
+                }
+            }, exec))
+            .toList();
 
-                Map<String, Object> item = new LinkedHashMap<>();
-                item.put("symbol",        symbol);
-                item.put("label",         LABELS.getOrDefault(symbol, symbol));
-                item.put("category",      CATEGORIES.getOrDefault(symbol, "equities"));
-                item.put("price",         q.getPrice());
-                item.put("change",        q.getChange());
-                item.put("changePercent", q.getChangePercent());
-                item.put("currency",      q.getCurrency());
-                results.add(item);
-            } catch (Exception ignored) {
-                // Skip failed symbols — overview should never crash
-            }
-        }
+        // Preserve ordering — collect in OVERVIEW_SYMBOLS order, skip nulls
+        List<Map<String, Object>> results = futures.stream()
+            .map(f -> {
+                try { return f.get(8, TimeUnit.SECONDS); }
+                catch (Exception e) { return null; }
+            })
+            .filter(Objects::nonNull)
+            .collect(Collectors.toList());
+
+        exec.shutdown();
 
         return ApiResponse.<List<Map<String, Object>>>builder()
                 .data(results)

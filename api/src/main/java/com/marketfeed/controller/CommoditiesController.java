@@ -12,9 +12,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/v1/commodities")
@@ -119,16 +119,38 @@ public class CommoditiesController {
                description = "Energy, metals, grains, softs, livestock, index futures, rates, FX. Cached 2 min.")
     @Cacheable("commodities")
     public ApiResponse<Map<String, List<Quote>>> getFuturesSnapshot() {
-        Map<String, List<Quote>> snapshot = new LinkedHashMap<>();
+        ExecutorService exec = Executors.newVirtualThreadPerTaskExecutor();
 
+        // Kick off all fetches in parallel across all sectors
+        Map<String, List<CompletableFuture<Quote>>> sectorFutures = new LinkedHashMap<>();
         FUTURES.forEach((sector, symbols) -> {
-            List<Quote> quotes = symbols.stream()
-                    .map(sym -> quoteService.getQuote(sym))
-                    .filter(r -> r.getData() != null)
-                    .map(ApiResponse::getData)
-                    .toList();
+            List<CompletableFuture<Quote>> futs = symbols.stream()
+                .map(sym -> CompletableFuture.supplyAsync(() -> {
+                    try {
+                        ApiResponse<Quote> r = quoteService.getQuote(sym);
+                        return r.getData();
+                    } catch (Exception e) {
+                        return null;
+                    }
+                }, exec))
+                .collect(Collectors.toList());
+            sectorFutures.put(sector, futs);
+        });
+
+        // Collect results preserving sector order
+        Map<String, List<Quote>> snapshot = new LinkedHashMap<>();
+        sectorFutures.forEach((sector, futs) -> {
+            List<Quote> quotes = futs.stream()
+                .map(f -> {
+                    try { return f.get(8, TimeUnit.SECONDS); }
+                    catch (Exception e) { return null; }
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
             if (!quotes.isEmpty()) snapshot.put(sector, quotes);
         });
+
+        exec.shutdown();
 
         return ApiResponse.<Map<String, List<Quote>>>builder()
                 .data(snapshot)
