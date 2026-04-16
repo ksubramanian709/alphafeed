@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -17,35 +17,6 @@ interface CalendarItem {
   analystCount: number | null
 }
 
-interface QuarterlyEarning {
-  fiscalDateEnding: string
-  reportedDate: string
-  reportedEps: number | null
-  estimatedEps: number | null
-  surprise: number | null
-  surprisePercentage: number | null
-}
-
-interface EarningsHistory {
-  symbol: string
-  quarterlyEarnings: QuarterlyEarning[] | null
-  error?: string
-}
-
-interface NewsItem {
-  title: string
-  url: string
-  source: string
-  summary: string | null
-  publishedAt: string | null
-  imageUrl: string | null
-}
-
-interface NewsResponse {
-  data: NewsItem[]
-  source: string
-}
-
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function toDateKey(d: Date) {
@@ -60,35 +31,6 @@ function fmtShortDate(s: string) {
   return new Date(s + 'T00:00:00').toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
   })
-}
-
-function fmtQuarter(s: string) {
-  if (!s) return '—'
-  const d = new Date(s); const m = d.getUTCMonth() + 1; const y = d.getUTCFullYear()
-  return `${m <= 3 ? 'Q1' : m <= 6 ? 'Q2' : m <= 9 ? 'Q3' : 'Q4'} ${y}`
-}
-
-function fmtEps(n: number | null) {
-  if (n == null) return '—'
-  return (n >= 0 ? '' : '−') + '$' + Math.abs(n).toFixed(2)
-}
-
-function fmtCap(n: number | null) {
-  if (n == null) return null
-  if (n >= 1e12) return `$${(n / 1e12).toFixed(2)}T`
-  if (n >= 1e9)  return `$${(n / 1e9).toFixed(1)}B`
-  if (n >= 1e6)  return `$${(n / 1e6).toFixed(0)}M`
-  return `$${n}`
-}
-
-function timeAgo(iso: string | null): string {
-  if (!iso) return ''
-  const diff = Date.now() - new Date(iso).getTime()
-  const h = Math.floor(diff / 3600000)
-  const m = Math.floor(diff / 60000)
-  if (h >= 24) return `${Math.floor(h / 24)}d ago`
-  if (h > 0) return `${h}h ago`
-  return `${m}m ago`
 }
 
 // Build a 6-row × 7-col calendar grid for the given month
@@ -154,16 +96,12 @@ function sortDay(arr: CalendarItem[]): CalendarItem[] {
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function EarningsCalendar() {
+  const router = useRouter()
   const [items, setItems]           = useState<CalendarItem[]>([])
   const [loading, setLoading]       = useState(true)
   const [viewDate, setViewDate]     = useState(() => new Date())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [search, setSearch]         = useState('')
-  const [detail, setDetail]         = useState<{ symbol: string; item: CalendarItem } | null>(null)
-  const [history, setHistory]       = useState<EarningsHistory | null>(null)
-  const [histLoading, setHistLoading] = useState(false)
-  const [news, setNews]             = useState<NewsItem[]>([])
-  const [newsLoading, setNewsLoading] = useState(false)
   const [showAll, setShowAll]       = useState(true)
 
   useEffect(() => {
@@ -192,30 +130,10 @@ export default function EarningsCalendar() {
 
   function selectDate(key: string) {
     setSelectedDate(prev => prev === key ? null : key)
-    setDetail(null)
-    setHistory(null)
-    setNews([])
   }
 
-  async function openDetail(item: CalendarItem) {
-    setDetail({ symbol: item.symbol, item })
-    setHistory(null)
-    setNews([])
-    setHistLoading(true)
-    setNewsLoading(true)
-
-    // Fetch history and news in parallel
-    const [histRes, newsRes] = await Promise.allSettled([
-      fetch(`${API}/v1/earnings/${item.symbol}`).then(r => r.json()) as Promise<EarningsHistory>,
-      fetch(`${API}/v1/news/${item.symbol}`).then(r => r.json()) as Promise<NewsResponse>,
-    ])
-
-    if (histRes.status === 'fulfilled') setHistory(histRes.value)
-    else setHistory({ symbol: item.symbol, quarterlyEarnings: null, error: 'Failed to load.' })
-    setHistLoading(false)
-
-    if (newsRes.status === 'fulfilled' && newsRes.value?.data) setNews(newsRes.value.data.slice(0, 5))
-    setNewsLoading(false)
+  function goToTicker(symbol: string) {
+    router.push(`/ticker/${encodeURIComponent(symbol)}`)
   }
 
   const selectedItems = selectedDate ? sortDay(byDate[selectedDate] ?? []) : []
@@ -225,7 +143,7 @@ export default function EarningsCalendar() {
         i.name?.toLowerCase().includes(search.toLowerCase()))
     : selectedItems
 
-  const searchResults = search.trim() && !selectedDate
+  const searchResults = search.trim()
     ? sortDay(visibleItems.filter(i =>
         i.symbol.toLowerCase().includes(search.toLowerCase()) ||
         i.name?.toLowerCase().includes(search.toLowerCase())))
@@ -270,14 +188,14 @@ export default function EarningsCalendar() {
       </div>
 
       {/* ── Global search results ── */}
-      {search.trim() && !selectedDate && (
+      {search.trim() && (
         <div className="mb-4 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
           {searchResults.length === 0 ? (
             <p className="text-xs text-slate-600 text-center py-4">No results for "{search}"</p>
           ) : (
             <div className="divide-y divide-slate-800/50 max-h-48 overflow-y-auto">
               {searchResults.map((item, i) => (
-                <SearchRow key={i} item={item} onSelect={() => openDetail(item)} />
+                <SearchRow key={i} item={item} onSelect={() => goToTicker(item.symbol)} />
               ))}
             </div>
           )}
@@ -353,7 +271,9 @@ export default function EarningsCalendar() {
                           <div className="space-y-[3px]">
                             {shown.map((item, i) => (
                               <div key={i}
-                                className={`rounded px-1 py-[2px] truncate leading-tight
+                                onClick={e => { e.stopPropagation(); goToTicker(item.symbol) }}
+                                className={`rounded px-1 py-[2px] truncate leading-tight cursor-pointer
+                                  hover:brightness-125 transition-all
                                   ${MAJOR.has(item.symbol)
                                     ? 'bg-slate-700 text-slate-200'
                                     : 'bg-slate-800/80 text-slate-400'}`}>
@@ -386,7 +306,7 @@ export default function EarningsCalendar() {
                     {selectedItems.length} report{selectedItems.length !== 1 ? 's' : ''}
                   </span>
                 </span>
-                <button onClick={() => { setSelectedDate(null); setDetail(null) }}
+                <button onClick={() => setSelectedDate(null)}
                   className="text-slate-600 hover:text-slate-400 text-xs">✕</button>
               </div>
 
@@ -407,8 +327,7 @@ export default function EarningsCalendar() {
                   <SearchRow
                     key={i}
                     item={item}
-                    active={detail?.symbol === item.symbol}
-                    onSelect={() => openDetail(item)}
+                    onSelect={() => goToTicker(item.symbol)}
                   />
                 ))}
               </div>
@@ -417,196 +336,20 @@ export default function EarningsCalendar() {
         </div>
       )}
 
-      {/* ── Company earnings preview panel ── */}
-      {detail && (
-        <div className="mt-3 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-
-          {/* Header */}
-          <div className="px-5 py-4 border-b border-slate-800 flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap mb-1">
-                <Link href={`/ticker/${encodeURIComponent(detail.symbol)}`}
-                  className="font-mono font-bold text-xl text-slate-100 hover:text-emerald-400 transition-colors">
-                  {detail.symbol}
-                </Link>
-                {detail.item.reportTime && (
-                  <span className="text-[10px] bg-slate-700 text-slate-400 px-2 py-0.5 rounded-full">
-                    {detail.item.reportTime}
-                  </span>
-                )}
-                {detail.item.marketCap && (
-                  <span className="text-[10px] text-slate-500">
-                    {fmtCap(detail.item.marketCap)}
-                  </span>
-                )}
-              </div>
-              <p className="text-sm text-slate-400 truncate">{detail.item.name}</p>
-              <p className="text-xs text-slate-600 mt-1">
-                Reports <span className="text-slate-400">{fmtShortDate(detail.item.reportDate)}</span>
-              </p>
-            </div>
-            <button onClick={() => { setDetail(null); setHistory(null); setNews([]) }}
-              className="text-slate-600 hover:text-slate-400 shrink-0 mt-0.5">✕</button>
-          </div>
-
-          {/* EPS Estimate card */}
-          <div className="px-5 py-4 border-b border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <StatCard label="EPS Estimate" value={fmtEps(detail.item.estimate)}
-              sub={detail.item.analystCount ? `${detail.item.analystCount} analysts` : undefined} />
-            <StatCard label="Last Year EPS" value={fmtEps(detail.item.lastYearEPS)}
-              sub={detail.item.lastYearEPS && detail.item.estimate
-                ? (() => {
-                    const chg = ((detail.item.estimate - detail.item.lastYearEPS) / Math.abs(detail.item.lastYearEPS)) * 100
-                    return `${chg >= 0 ? '+' : ''}${chg.toFixed(1)}% YoY est.`
-                  })()
-                : undefined}
-              subColor={detail.item.lastYearEPS && detail.item.estimate
-                ? detail.item.estimate >= detail.item.lastYearEPS ? 'text-emerald-400' : 'text-red-400'
-                : undefined} />
-            <StatCard label="Market Cap" value={fmtCap(detail.item.marketCap) ?? '—'} />
-            <StatCard label="Report Time" value={detail.item.reportTime ?? 'TBD'} />
-          </div>
-
-          {/* History section */}
-          {histLoading && (
-            <div className="flex items-center justify-center h-24 text-slate-600 text-xs animate-pulse border-b border-slate-800">
-              Loading earnings history…
-            </div>
-          )}
-
-          {!histLoading && history?.error && !history.quarterlyEarnings && (
-            <div className="px-5 py-4 border-b border-slate-800">
-              <p className="text-xs text-slate-600">{history.error}</p>
-            </div>
-          )}
-
-          {!histLoading && history?.quarterlyEarnings && history.quarterlyEarnings.length > 0 && (
-            <div className="px-5 py-4 border-b border-slate-800">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">EPS History</p>
-              <BeatRateBar quarters={history.quarterlyEarnings} />
-              <EpsChart quarters={history.quarterlyEarnings} />
-
-              {/* Table */}
-              <div className="overflow-x-auto mt-4">
-                <table className="w-full text-xs font-mono">
-                  <thead>
-                    <tr className="text-slate-600 border-b border-slate-800">
-                      <th className="text-left pb-2 font-normal">Quarter</th>
-                      <th className="text-right pb-2 px-3 font-normal">Est.</th>
-                      <th className="text-right pb-2 px-3 font-normal">Actual</th>
-                      <th className="text-right pb-2 px-3 font-normal">Surprise</th>
-                      <th className="text-right pb-2 pl-3 font-normal">vs Est.</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {history.quarterlyEarnings.map((q, i) => {
-                      const beat = (q.surprise ?? 0) > 0
-                      const miss = (q.surprise ?? 0) < 0
-                      return (
-                        <tr key={i} className="border-b border-slate-800/40 last:border-0 hover:bg-slate-800/30">
-                          <td className="py-2 pr-3">
-                            <div className="text-slate-300">{fmtQuarter(q.fiscalDateEnding)}</div>
-                            <div className="text-slate-700 text-[10px]">{q.reportedDate ?? '—'}</div>
-                          </td>
-                          <td className="py-2 px-3 text-right text-slate-500">{fmtEps(q.estimatedEps)}</td>
-                          <td className={`py-2 px-3 text-right font-semibold
-                            ${beat ? 'text-emerald-400' : miss ? 'text-red-400' : 'text-slate-300'}`}>
-                            {fmtEps(q.reportedEps)}
-                          </td>
-                          <td className={`py-2 px-3 text-right
-                            ${beat ? 'text-emerald-400' : miss ? 'text-red-400' : 'text-slate-500'}`}>
-                            {q.surprise != null ? (beat ? '+' : '') + q.surprise.toFixed(2) : '—'}
-                          </td>
-                          <td className="py-2 pl-3 text-right">
-                            <span className={`inline-block text-[10px] font-semibold px-2 py-0.5 rounded-full
-                              ${beat ? 'bg-emerald-500/15 text-emerald-400' :
-                                miss ? 'bg-red-500/15 text-red-400' :
-                                       'bg-slate-700 text-slate-500'}`}>
-                              {q.surprisePercentage != null
-                                ? (beat ? '+' : '') + q.surprisePercentage.toFixed(1) + '%'
-                                : '—'}
-                            </span>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* News section */}
-          <div className="px-5 py-4">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
-              Recent News — {detail.symbol}
-            </p>
-            {newsLoading && (
-              <div className="text-xs text-slate-600 animate-pulse">Loading news…</div>
-            )}
-            {!newsLoading && news.length === 0 && (
-              <p className="text-xs text-slate-600">No recent news found.</p>
-            )}
-            {!newsLoading && news.length > 0 && (
-              <div className="space-y-3">
-                {news.map((n, i) => (
-                  <a key={i} href={n.url} target="_blank" rel="noopener noreferrer"
-                    className="flex gap-3 group hover:bg-slate-800/40 -mx-2 px-2 py-2 rounded-lg transition-colors">
-                    {n.imageUrl && (
-                      <img src={n.imageUrl} alt="" className="w-12 h-12 rounded object-cover shrink-0 bg-slate-800" />
-                    )}
-                    <div className="min-w-0">
-                      <p className="text-xs text-slate-300 group-hover:text-white leading-snug line-clamp-2 transition-colors">
-                        {n.title}
-                      </p>
-                      <p className="text-[10px] text-slate-600 mt-1">
-                        {n.source}{n.publishedAt ? ` · ${timeAgo(n.publishedAt)}` : ''}
-                      </p>
-                    </div>
-                  </a>
-                ))}
-              </div>
-            )}
-
-            {/* Link to full ticker page */}
-            <Link href={`/ticker/${encodeURIComponent(detail.symbol)}`}
-              className="mt-4 flex items-center gap-1 text-xs text-emerald-500 hover:text-emerald-400 transition-colors">
-              View full {detail.symbol} analysis
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
-            </Link>
-          </div>
-        </div>
-      )}
     </section>
   )
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
-function StatCard({ label, value, sub, subColor }: {
-  label: string; value: string; sub?: string; subColor?: string
-}) {
-  return (
-    <div>
-      <p className="text-[10px] text-slate-600 uppercase tracking-wider mb-0.5">{label}</p>
-      <p className="text-sm font-mono font-semibold text-slate-200">{value}</p>
-      {sub && <p className={`text-[10px] mt-0.5 ${subColor ?? 'text-slate-500'}`}>{sub}</p>}
-    </div>
-  )
-}
-
-function SearchRow({ item, active, onSelect }: {
+function SearchRow({ item, onSelect }: {
   item: CalendarItem
-  active?: boolean
   onSelect: () => void
 }) {
   return (
     <button
       onClick={onSelect}
-      className={`w-full flex items-center justify-between px-4 py-2.5 transition-colors text-left
-        ${active ? 'bg-slate-700/60' : 'hover:bg-slate-800/40'}`}
+      className="w-full flex items-center justify-between px-4 py-2.5 transition-colors text-left hover:bg-slate-800/40"
     >
       <div className="min-w-0">
         <span className="font-mono text-sm font-bold text-slate-100">{item.symbol}</span>
@@ -631,70 +374,3 @@ function SearchRow({ item, active, onSelect }: {
   )
 }
 
-function BeatRateBar({ quarters }: { quarters: QuarterlyEarning[] }) {
-  const beats = quarters.filter(q => (q.surprise ?? 0) > 0).length
-  const pct   = Math.round((beats / quarters.length) * 100)
-  return (
-    <div className="mb-4">
-      <div className="flex items-center justify-between text-xs mb-1.5">
-        <span className="text-slate-500">Beat rate — last {quarters.length} quarters</span>
-        <span className={`font-semibold ${pct >= 70 ? 'text-emerald-400' : pct >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
-          {beats}/{quarters.length} ({pct}%)
-        </span>
-      </div>
-      <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all ${pct >= 70 ? 'bg-emerald-500' : pct >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-    </div>
-  )
-}
-
-function EpsChart({ quarters }: { quarters: QuarterlyEarning[] }) {
-  const reversed = [...quarters].reverse()
-  const values   = reversed.map(q => q.reportedEps ?? 0)
-  const max      = Math.max(...values.map(Math.abs), 0.01)
-
-  return (
-    <div>
-      <p className="text-xs text-slate-600 mb-2">EPS per quarter</p>
-      <div className="flex items-end gap-1 h-16">
-        {reversed.map((q, i) => {
-          const val  = q.reportedEps ?? 0
-          const est  = q.estimatedEps ?? 0
-          const beat = val > est
-          const miss = val < est
-          const h    = Math.max(4, Math.round((Math.abs(val) / max) * 56))
-          const color = beat ? 'bg-emerald-500' : miss ? 'bg-red-500' : 'bg-slate-500'
-          return (
-            <div key={i} className="flex-1 flex flex-col items-center justify-end group relative">
-              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:flex
-                              flex-col items-center pointer-events-none z-10">
-                <div className="bg-slate-700 text-slate-200 text-[10px] font-mono rounded px-2 py-1 whitespace-nowrap shadow-lg">
-                  {fmtQuarter(q.fiscalDateEnding)}: {val >= 0 ? '' : '−'}${Math.abs(val).toFixed(2)}
-                  {q.surprisePercentage != null && (
-                    <span className={`ml-1 ${beat ? 'text-emerald-400' : miss ? 'text-red-400' : ''}`}>
-                      ({beat ? '+' : ''}{q.surprisePercentage.toFixed(1)}%)
-                    </span>
-                  )}
-                </div>
-                <div className="w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-slate-700" />
-              </div>
-              <div className={`w-full rounded-t-sm ${color} opacity-80 hover:opacity-100 transition-opacity`}
-                style={{ height: `${h}px` }} />
-            </div>
-          )
-        })}
-      </div>
-      <div className="flex gap-1 mt-1">
-        {reversed.map((q, i) => (
-          <div key={i} className="flex-1 text-center text-[8px] text-slate-700 truncate">
-            {fmtQuarter(q.fiscalDateEnding).replace(' ', "'")}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
