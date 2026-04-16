@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -9,7 +10,11 @@ interface CalendarItem {
   reportDate: string
   fiscalDateEnding: string
   estimate: number | null
+  lastYearEPS: number | null
   currency: string
+  marketCap: number | null
+  reportTime: string | null
+  analystCount: number | null
 }
 
 interface QuarterlyEarning {
@@ -25,6 +30,20 @@ interface EarningsHistory {
   symbol: string
   quarterlyEarnings: QuarterlyEarning[] | null
   error?: string
+}
+
+interface NewsItem {
+  title: string
+  url: string
+  source: string
+  summary: string | null
+  publishedAt: string | null
+  imageUrl: string | null
+}
+
+interface NewsResponse {
+  data: NewsItem[]
+  source: string
 }
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -51,14 +70,32 @@ function fmtQuarter(s: string) {
 
 function fmtEps(n: number | null) {
   if (n == null) return '—'
-  return (n >= 0 ? '' : '−') + Math.abs(n).toFixed(2)
+  return (n >= 0 ? '' : '−') + '$' + Math.abs(n).toFixed(2)
+}
+
+function fmtCap(n: number | null) {
+  if (n == null) return null
+  if (n >= 1e12) return `$${(n / 1e12).toFixed(2)}T`
+  if (n >= 1e9)  return `$${(n / 1e9).toFixed(1)}B`
+  if (n >= 1e6)  return `$${(n / 1e6).toFixed(0)}M`
+  return `$${n}`
+}
+
+function timeAgo(iso: string | null): string {
+  if (!iso) return ''
+  const diff = Date.now() - new Date(iso).getTime()
+  const h = Math.floor(diff / 3600000)
+  const m = Math.floor(diff / 60000)
+  if (h >= 24) return `${Math.floor(h / 24)}d ago`
+  if (h > 0) return `${h}h ago`
+  return `${m}m ago`
 }
 
 // Build a 6-row × 7-col calendar grid for the given month
 function buildGrid(year: number, month: number): (Date | null)[][] {
   const first = new Date(year, month, 1)
   const last  = new Date(year, month + 1, 0)
-  const startDow = first.getDay() // 0=Sun
+  const startDow = first.getDay()
   const cells: (Date | null)[] = []
   for (let i = 0; i < startDow; i++) cells.push(null)
   for (let d = 1; d <= last.getDate(); d++) cells.push(new Date(year, month, d))
@@ -70,9 +107,7 @@ function buildGrid(year: number, month: number): (Date | null)[][] {
 
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-// Major companies by market cap — these get shown first and by default
 const MAJOR = new Set([
-  // Mega cap
   'AAPL','MSFT','NVDA','AMZN','GOOGL','GOOG','META','TSLA','BRK.B','AVGO',
   'JPM','LLY','V','UNH','XOM','MA','JNJ','PG','COST','HD','NFLX','BAC',
   'CRM','ABBV','AMD','ORCL','KO','CVX','MRK','PEP','ADBE','TMO','CSCO',
@@ -83,31 +118,37 @@ const MAJOR = new Set([
   'MDLZ','EOG','CI','SO','DUK','ITW','ETN','SHW','TJX','CL','WM',
   'PYPL','APD','AON','HCA','CME','MAR','UBER','ABNB','NOW','SNOW',
   'PANW','CRWD','NET','ZS','MDB','DDOG','PLTR','COIN','HOOD',
-  'F','GM','T','VZ','DIS','CMCSA','NFLX','PARA','WBD',
+  'F','GM','T','VZ','DIS','CMCSA','PARA','WBD',
   'MS','C','WFC','USB','AXP','COF','SCHW','BK','TFC',
-  'PFE','MRK','GILD','BIIB','MRNA','BNTX','HZNP',
-  'UPS','FDX','LMT','NOC','GD','HII','L3H',
-  'MSCI','ICE','MCO','FIS','FISV','PAYX','ADP',
-  'FICO','CDNS','SNPS','KLAC','MRVL','MCHP','ON',
+  'PFE','MRK','BIIB','MRNA','BNTX',
+  'UPS','FDX','LMT','NOC','GD',
+  'MSCI','ICE','MCO','FIS','FISV','PAYX',
+  'FICO','CDNS','SNPS','KLAC','MRVL','MCHP',
   'SHOP','SQ','ROKU','TTD','TWLO','ZM','DOCU',
-  'NVO','ASML','TSM','BABA','JD','PDD','BIDU',
-  'V','MA','PYPL','ADYEY',
-  'WBA','CVS','MCK','ABC','CAH',
+  'NVO','ASML','TSM','BABA','JD','PDD',
+  'WBA','CVS','MCK',
   'NEE','AEP','D','EXC','SRE',
-  'AMT','PLD','EQIX','CCI','SPG',
-  'FCX','NEM','AA','X','NUE',
-  'RIVN','LCID','NIO','LI','XPEV',
-  'ENPH','FSLR','SEDG','RUN',
-  'RBLX','U','TTWO','EA','ATVI','NTES',
+  'AMT','EQIX','CCI','SPG',
+  'FCX','NEM',
+  'RIVN','NIO',
+  'ENPH','FSLR',
+  'RBLX','U','TTWO','EA',
 ])
 
-// Shorten a company name to fit a small calendar cell
 function shortName(name: string): string {
   if (!name) return ''
   const stopWords = ['Inc.','Inc','Corp.','Corp','Co.','Co','Ltd.','Ltd','Group','Holdings','Technologies','Technology','International','Incorporated','LLC','PLC','N.V.','S.A.']
   let s = name
   for (const w of stopWords) s = s.replace(new RegExp('\\s*,?\\s*' + w.replace('.','\\.')  + '\\s*$', 'i'), '')
   return s.trim().slice(0, 16)
+}
+
+function sortDay(arr: CalendarItem[]): CalendarItem[] {
+  return [...arr].sort((a, b) => {
+    const ac = a.marketCap ?? (MAJOR.has(a.symbol) ? 1 : 0)
+    const bc = b.marketCap ?? (MAJOR.has(b.symbol) ? 1 : 0)
+    return bc - ac
+  })
 }
 
 // ── component ─────────────────────────────────────────────────────────────────
@@ -121,7 +162,9 @@ export default function EarningsCalendar() {
   const [detail, setDetail]         = useState<{ symbol: string; item: CalendarItem } | null>(null)
   const [history, setHistory]       = useState<EarningsHistory | null>(null)
   const [histLoading, setHistLoading] = useState(false)
-  const [showAll, setShowAll]       = useState(false)
+  const [news, setNews]             = useState<NewsItem[]>([])
+  const [newsLoading, setNewsLoading] = useState(false)
+  const [showAll, setShowAll]       = useState(true)
 
   useEffect(() => {
     fetch(`${API}/v1/earnings/calendar`)
@@ -131,19 +174,8 @@ export default function EarningsCalendar() {
       .finally(() => setLoading(false))
   }, [])
 
-  // Filter to major companies unless showAll is on
   const visibleItems = showAll ? items : items.filter(i => MAJOR.has(i.symbol))
 
-  // Sort each day: major companies first, then alphabetical
-  function sortDay(arr: CalendarItem[]): CalendarItem[] {
-    return [...arr].sort((a, b) => {
-      const am = MAJOR.has(a.symbol) ? 0 : 1
-      const bm = MAJOR.has(b.symbol) ? 0 : 1
-      return am !== bm ? am - bm : a.symbol.localeCompare(b.symbol)
-    })
-  }
-
-  // Group items by date
   const byDate = visibleItems.reduce<Record<string, CalendarItem[]>>((acc, item) => {
     acc[item.reportDate] = acc[item.reportDate] ?? []
     acc[item.reportDate].push(item)
@@ -153,7 +185,6 @@ export default function EarningsCalendar() {
   const year  = viewDate.getFullYear()
   const month = viewDate.getMonth()
   const grid  = buildGrid(year, month)
-
   const todayKey = toDateKey(new Date())
 
   function prevMonth() { setViewDate(new Date(year, month - 1, 1)); setSelectedDate(null) }
@@ -163,21 +194,28 @@ export default function EarningsCalendar() {
     setSelectedDate(prev => prev === key ? null : key)
     setDetail(null)
     setHistory(null)
+    setNews([])
   }
 
   async function openDetail(item: CalendarItem) {
     setDetail({ symbol: item.symbol, item })
     setHistory(null)
+    setNews([])
     setHistLoading(true)
-    try {
-      const r = await fetch(`${API}/v1/earnings/${item.symbol}`)
-      const d: EarningsHistory = await r.json()
-      setHistory(d)
-    } catch {
-      setHistory({ symbol: item.symbol, quarterlyEarnings: null, error: 'Failed to load history.' })
-    } finally {
-      setHistLoading(false)
-    }
+    setNewsLoading(true)
+
+    // Fetch history and news in parallel
+    const [histRes, newsRes] = await Promise.allSettled([
+      fetch(`${API}/v1/earnings/${item.symbol}`).then(r => r.json()) as Promise<EarningsHistory>,
+      fetch(`${API}/v1/news/${item.symbol}`).then(r => r.json()) as Promise<NewsResponse>,
+    ])
+
+    if (histRes.status === 'fulfilled') setHistory(histRes.value)
+    else setHistory({ symbol: item.symbol, quarterlyEarnings: null, error: 'Failed to load.' })
+    setHistLoading(false)
+
+    if (newsRes.status === 'fulfilled' && newsRes.value?.data) setNews(newsRes.value.data.slice(0, 5))
+    setNewsLoading(false)
   }
 
   const selectedItems = selectedDate ? sortDay(byDate[selectedDate] ?? []) : []
@@ -187,7 +225,6 @@ export default function EarningsCalendar() {
         i.name?.toLowerCase().includes(search.toLowerCase()))
     : selectedItems
 
-  // Search across all items (respects showAll)
   const searchResults = search.trim() && !selectedDate
     ? sortDay(visibleItems.filter(i =>
         i.symbol.toLowerCase().includes(search.toLowerCase()) ||
@@ -202,23 +239,17 @@ export default function EarningsCalendar() {
           <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500">
             Earnings Calendar
           </h2>
-          {/* Major / All toggle */}
           <div className="flex rounded-md overflow-hidden border border-slate-700 text-[10px]">
             <button
               onClick={() => setShowAll(false)}
               className={`px-2.5 py-1 transition-colors ${!showAll ? 'bg-slate-700 text-slate-200' : 'text-slate-500 hover:text-slate-300'}`}
-            >
-              Major
-            </button>
+            >Major</button>
             <button
               onClick={() => setShowAll(true)}
               className={`px-2.5 py-1 transition-colors ${showAll ? 'bg-slate-700 text-slate-200' : 'text-slate-500 hover:text-slate-300'}`}
-            >
-              All
-            </button>
+            >All</button>
           </div>
         </div>
-        {/* Search */}
         <div className="relative">
           <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-600 pointer-events-none"
             fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -238,7 +269,7 @@ export default function EarningsCalendar() {
         </div>
       </div>
 
-      {/* ── Global search results (no date selected) ── */}
+      {/* ── Global search results ── */}
       {search.trim() && !selectedDate && (
         <div className="mb-4 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
           {searchResults.length === 0 ? (
@@ -256,6 +287,10 @@ export default function EarningsCalendar() {
       {loading ? (
         <div className="h-64 flex items-center justify-center text-slate-600 text-xs animate-pulse">
           Loading calendar…
+        </div>
+      ) : items.length === 0 ? (
+        <div className="h-64 flex items-center justify-center text-slate-600 text-xs">
+          No earnings data available
         </div>
       ) : (
         <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
@@ -280,9 +315,7 @@ export default function EarningsCalendar() {
           {/* Day-of-week headers */}
           <div className="grid grid-cols-7 border-b border-slate-800">
             {DOW.map(d => (
-              <div key={d} className="text-center text-[10px] font-medium text-slate-600 py-2">
-                {d}
-              </div>
+              <div key={d} className="text-center text-[10px] font-medium text-slate-600 py-2">{d}</div>
             ))}
           </div>
 
@@ -331,9 +364,7 @@ export default function EarningsCalendar() {
                               </div>
                             ))}
                             {extra > 0 && (
-                              <div className="text-[9px] text-slate-600 pl-1 pt-[1px]">
-                                +{extra} more
-                              </div>
+                              <div className="text-[9px] text-slate-600 pl-1 pt-[1px]">+{extra} more</div>
                             )}
                           </div>
                         </>
@@ -359,7 +390,6 @@ export default function EarningsCalendar() {
                   className="text-slate-600 hover:text-slate-400 text-xs">✕</button>
               </div>
 
-              {/* Search within day */}
               {selectedItems.length > 5 && (
                 <div className="px-4 pt-3">
                   <input
@@ -387,46 +417,73 @@ export default function EarningsCalendar() {
         </div>
       )}
 
-      {/* ── Company detail panel ── */}
+      {/* ── Company earnings preview panel ── */}
       {detail && (
         <div className="mt-3 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
-          {/* Detail header */}
+
+          {/* Header */}
           <div className="px-5 py-4 border-b border-slate-800 flex items-start justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="font-mono font-bold text-lg text-slate-100">{detail.symbol}</span>
-                {detail.item.estimate !== null && (
-                  <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full font-mono">
-                    Est. EPS {detail.item.estimate.toFixed(2)}
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <Link href={`/ticker/${encodeURIComponent(detail.symbol)}`}
+                  className="font-mono font-bold text-xl text-slate-100 hover:text-emerald-400 transition-colors">
+                  {detail.symbol}
+                </Link>
+                {detail.item.reportTime && (
+                  <span className="text-[10px] bg-slate-700 text-slate-400 px-2 py-0.5 rounded-full">
+                    {detail.item.reportTime}
+                  </span>
+                )}
+                {detail.item.marketCap && (
+                  <span className="text-[10px] text-slate-500">
+                    {fmtCap(detail.item.marketCap)}
                   </span>
                 )}
               </div>
-              <p className="text-sm text-slate-500">{detail.item.name}</p>
+              <p className="text-sm text-slate-400 truncate">{detail.item.name}</p>
               <p className="text-xs text-slate-600 mt-1">
                 Reports <span className="text-slate-400">{fmtShortDate(detail.item.reportDate)}</span>
               </p>
             </div>
-            <button onClick={() => { setDetail(null); setHistory(null) }}
+            <button onClick={() => { setDetail(null); setHistory(null); setNews([]) }}
               className="text-slate-600 hover:text-slate-400 shrink-0 mt-0.5">✕</button>
           </div>
 
-          {/* History */}
+          {/* EPS Estimate card */}
+          <div className="px-5 py-4 border-b border-slate-800 grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <StatCard label="EPS Estimate" value={fmtEps(detail.item.estimate)}
+              sub={detail.item.analystCount ? `${detail.item.analystCount} analysts` : undefined} />
+            <StatCard label="Last Year EPS" value={fmtEps(detail.item.lastYearEPS)}
+              sub={detail.item.lastYearEPS && detail.item.estimate
+                ? (() => {
+                    const chg = ((detail.item.estimate - detail.item.lastYearEPS) / Math.abs(detail.item.lastYearEPS)) * 100
+                    return `${chg >= 0 ? '+' : ''}${chg.toFixed(1)}% YoY est.`
+                  })()
+                : undefined}
+              subColor={detail.item.lastYearEPS && detail.item.estimate
+                ? detail.item.estimate >= detail.item.lastYearEPS ? 'text-emerald-400' : 'text-red-400'
+                : undefined} />
+            <StatCard label="Market Cap" value={fmtCap(detail.item.marketCap) ?? '—'} />
+            <StatCard label="Report Time" value={detail.item.reportTime ?? 'TBD'} />
+          </div>
+
+          {/* History section */}
           {histLoading && (
-            <div className="flex items-center justify-center h-32 text-slate-600 text-xs animate-pulse">
+            <div className="flex items-center justify-center h-24 text-slate-600 text-xs animate-pulse border-b border-slate-800">
               Loading earnings history…
             </div>
           )}
 
           {!histLoading && history?.error && !history.quarterlyEarnings && (
-            <p className="text-xs text-slate-500 text-center py-8">{history.error}</p>
+            <div className="px-5 py-4 border-b border-slate-800">
+              <p className="text-xs text-slate-600">{history.error}</p>
+            </div>
           )}
 
           {!histLoading && history?.quarterlyEarnings && history.quarterlyEarnings.length > 0 && (
-            <div className="px-5 py-4">
-              {/* Beat rate summary */}
+            <div className="px-5 py-4 border-b border-slate-800">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">EPS History</p>
               <BeatRateBar quarters={history.quarterlyEarnings} />
-
-              {/* EPS bars chart */}
               <EpsChart quarters={history.quarterlyEarnings} />
 
               {/* Table */}
@@ -478,6 +535,48 @@ export default function EarningsCalendar() {
               </div>
             </div>
           )}
+
+          {/* News section */}
+          <div className="px-5 py-4">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+              Recent News — {detail.symbol}
+            </p>
+            {newsLoading && (
+              <div className="text-xs text-slate-600 animate-pulse">Loading news…</div>
+            )}
+            {!newsLoading && news.length === 0 && (
+              <p className="text-xs text-slate-600">No recent news found.</p>
+            )}
+            {!newsLoading && news.length > 0 && (
+              <div className="space-y-3">
+                {news.map((n, i) => (
+                  <a key={i} href={n.url} target="_blank" rel="noopener noreferrer"
+                    className="flex gap-3 group hover:bg-slate-800/40 -mx-2 px-2 py-2 rounded-lg transition-colors">
+                    {n.imageUrl && (
+                      <img src={n.imageUrl} alt="" className="w-12 h-12 rounded object-cover shrink-0 bg-slate-800" />
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-xs text-slate-300 group-hover:text-white leading-snug line-clamp-2 transition-colors">
+                        {n.title}
+                      </p>
+                      <p className="text-[10px] text-slate-600 mt-1">
+                        {n.source}{n.publishedAt ? ` · ${timeAgo(n.publishedAt)}` : ''}
+                      </p>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            )}
+
+            {/* Link to full ticker page */}
+            <Link href={`/ticker/${encodeURIComponent(detail.symbol)}`}
+              className="mt-4 flex items-center gap-1 text-xs text-emerald-500 hover:text-emerald-400 transition-colors">
+              View full {detail.symbol} analysis
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </div>
         </div>
       )}
     </section>
@@ -485,6 +584,18 @@ export default function EarningsCalendar() {
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
+
+function StatCard({ label, value, sub, subColor }: {
+  label: string; value: string; sub?: string; subColor?: string
+}) {
+  return (
+    <div>
+      <p className="text-[10px] text-slate-600 uppercase tracking-wider mb-0.5">{label}</p>
+      <p className="text-sm font-mono font-semibold text-slate-200">{value}</p>
+      {sub && <p className={`text-[10px] mt-0.5 ${subColor ?? 'text-slate-500'}`}>{sub}</p>}
+    </div>
+  )
+}
 
 function SearchRow({ item, active, onSelect }: {
   item: CalendarItem
@@ -504,7 +615,10 @@ function SearchRow({ item, active, onSelect }: {
         )}
         <span className="text-[10px] text-slate-700 ml-2 hidden sm:inline">{item.reportDate}</span>
       </div>
-      <div className="shrink-0 ml-4 text-right">
+      <div className="shrink-0 ml-4 text-right flex items-center gap-2">
+        {item.reportTime && (
+          <span className="text-[9px] text-slate-600 hidden sm:block">{item.reportTime}</span>
+        )}
         {item.estimate !== null ? (
           <span className="font-mono text-xs text-slate-400">
             Est. <span className="text-slate-300">{item.estimate.toFixed(2)}</span>
@@ -539,7 +653,7 @@ function BeatRateBar({ quarters }: { quarters: QuarterlyEarning[] }) {
 }
 
 function EpsChart({ quarters }: { quarters: QuarterlyEarning[] }) {
-  const reversed = [...quarters].reverse() // oldest → newest
+  const reversed = [...quarters].reverse()
   const values   = reversed.map(q => q.reportedEps ?? 0)
   const max      = Math.max(...values.map(Math.abs), 0.01)
 
@@ -556,11 +670,10 @@ function EpsChart({ quarters }: { quarters: QuarterlyEarning[] }) {
           const color = beat ? 'bg-emerald-500' : miss ? 'bg-red-500' : 'bg-slate-500'
           return (
             <div key={i} className="flex-1 flex flex-col items-center justify-end group relative">
-              {/* Tooltip */}
               <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 hidden group-hover:flex
                               flex-col items-center pointer-events-none z-10">
                 <div className="bg-slate-700 text-slate-200 text-[10px] font-mono rounded px-2 py-1 whitespace-nowrap shadow-lg">
-                  {fmtQuarter(q.fiscalDateEnding)}: {val >= 0 ? '' : '−'}{Math.abs(val).toFixed(2)}
+                  {fmtQuarter(q.fiscalDateEnding)}: {val >= 0 ? '' : '−'}${Math.abs(val).toFixed(2)}
                   {q.surprisePercentage != null && (
                     <span className={`ml-1 ${beat ? 'text-emerald-400' : miss ? 'text-red-400' : ''}`}>
                       ({beat ? '+' : ''}{q.surprisePercentage.toFixed(1)}%)
@@ -575,7 +688,6 @@ function EpsChart({ quarters }: { quarters: QuarterlyEarning[] }) {
           )
         })}
       </div>
-      {/* Quarter labels */}
       <div className="flex gap-1 mt-1">
         {reversed.map((q, i) => (
           <div key={i} className="flex-1 text-center text-[8px] text-slate-700 truncate">

@@ -1,6 +1,7 @@
 package com.marketfeed.service;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marketfeed.model.EarningsCalendarItem;
 import com.marketfeed.model.EarningsHistory;
@@ -15,9 +16,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
-import java.net.http.HttpResponse;
 import java.time.*;
+import java.time.DayOfWeek;
 import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -25,7 +27,6 @@ import java.util.*;
 public class EarningsService {
 
     private final RestTemplate restTemplate;
-    private final YahooFinanceCrumbService crumbService;
     private final ScreenerService screenerService;
     private final ObjectMapper mapper = new ObjectMapper();
 
@@ -34,10 +35,9 @@ public class EarningsService {
 
     private static final String BASE = "https://www.alphavantage.co/query";
 
-    // Yahoo Finance upcoming earnings screener — returns 250 companies per page
-    private static final String YF_EARNINGS_URL =
-        "https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved" +
-        "?formatted=false&lang=en-US&region=US&count=250&offset=%d&scrIds=upcoming_earnings&crumb=%s";
+    // Nasdaq earnings calendar — per-day, no auth required
+    private static final String NASDAQ_EARNINGS_URL =
+        "https://api.nasdaq.com/api/calendar/earnings?date=%s";
 
     // ─── Earnings history (per symbol) ───────────────────────────────────────────
 
@@ -91,17 +91,17 @@ public class EarningsService {
         }
     }
 
-    // ─── Earnings calendar: YF first, Alpha Vantage fallback ─────────────────────
+    // ─── Earnings calendar ────────────────────────────────────────────────────────
 
     @Cacheable(value = "earnings-calendar", key = "'upcoming'", unless = "#result == null || #result.isEmpty()")
     public List<EarningsCalendarItem> getEarningsCalendar() {
-        // Try Yahoo Finance first — live data, no API key required
-        List<EarningsCalendarItem> items = fetchYFEarningsCalendar();
+        // Primary: Nasdaq earnings calendar (no auth, reliable)
+        List<EarningsCalendarItem> items = fetchNasdaqEarningsCalendar();
         if (items.isEmpty()) {
-            log.info("YF earnings calendar empty — falling back to Alpha Vantage");
+            log.info("Nasdaq earnings calendar empty — falling back to Alpha Vantage");
             items = fetchAlphaVantageCalendar();
         } else {
-            log.info("Earnings calendar loaded from Yahoo Finance: {} companies", items.size());
+            log.info("Earnings calendar loaded from Nasdaq: {} companies", items.size());
         }
 
         // Build market cap lookup from screener universe (already cached)
@@ -114,7 +114,7 @@ public class EarningsService {
             log.warn("Could not enrich earnings calendar with market caps: {}", e.getMessage());
         }
 
-        // Enrich each item with market cap, then sort by cap desc and keep top 500
+        // Enrich items that are missing a market cap, sort by cap desc, keep top 500, re-sort by date
         return items.stream()
             .map(item -> {
                 Long cap = item.getMarketCap() != null ? item.getMarketCap()
@@ -125,8 +125,11 @@ public class EarningsService {
                     .reportDate(item.getReportDate())
                     .fiscalDateEnding(item.getFiscalDateEnding())
                     .estimate(item.getEstimate())
+                    .lastYearEPS(item.getLastYearEPS())
                     .currency(item.getCurrency())
                     .marketCap(cap)
+                    .reportTime(item.getReportTime())
+                    .analystCount(item.getAnalystCount())
                     .build();
             })
             .sorted(Comparator.comparingLong(
@@ -134,76 +137,101 @@ public class EarningsService {
             ).reversed())
             .limit(500)
             .sorted(Comparator.comparing(EarningsCalendarItem::getReportDate))
-            .collect(java.util.stream.Collectors.toList());
+            .collect(Collectors.toList());
     }
 
-    // ─── Yahoo Finance upcoming_earnings screener ─────────────────────────────────
+    // ─── Nasdaq earnings calendar — iterates 14 weekdays ─────────────────────────
 
-    private List<EarningsCalendarItem> fetchYFEarningsCalendar() {
-        String crumb = crumbService.getCrumb();
-        if (crumb == null) return List.of();
-
+    private List<EarningsCalendarItem> fetchNasdaqEarningsCalendar() {
         List<EarningsCalendarItem> items = new ArrayList<>();
-        LocalDate today  = LocalDate.now(ZoneId.of("America/New_York"));
-        LocalDate cutoff = today.plusDays(30);
+        LocalDate today = LocalDate.now(ZoneId.of("America/New_York"));
 
-        try {
-            // Two pages (0, 250) should cover ~500 companies — more than enough for 30 days
-            for (int offset : new int[]{0, 250}) {
-                String url = String.format(YF_EARNINGS_URL, offset, crumb);
-                HttpResponse<String> resp = crumbService.getHttpClient()
-                        .send(crumbService.get(url), HttpResponse.BodyHandlers.ofString());
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.USER_AGENT,
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36");
+        headers.set(HttpHeaders.ACCEPT, "application/json, text/plain, */*");
+        headers.set("Referer", "https://www.nasdaq.com/");
+        headers.set("Origin", "https://www.nasdaq.com");
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
 
-                if (resp.statusCode() == 401) { crumbService.invalidate(); break; }
-                if (resp.statusCode() != 200)  break;
+        int tradingDaysFetched = 0;
+        for (int offset = 0; offset <= 21 && tradingDaysFetched < 14; offset++) {
+            LocalDate date = today.plusDays(offset);
+            DayOfWeek dow = date.getDayOfWeek();
+            if (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY) continue;
+            tradingDaysFetched++;
 
-                YfEarningsResp body = mapper.readValue(resp.body(), YfEarningsResp.class);
-                List<YfEarningsQuote> quotes = Optional.ofNullable(body.getFinance())
-                    .map(YfEarningsWrapper::getResult)
-                    .filter(r -> !r.isEmpty())
-                    .map(r -> r.get(0).getQuotes())
-                    .orElse(List.of());
+            try {
+                String url = String.format(NASDAQ_EARNINGS_URL, date.toString());
+                ResponseEntity<NasdaqEarningsResp> resp = restTemplate.exchange(
+                    url, HttpMethod.GET, entity, NasdaqEarningsResp.class);
 
-                for (YfEarningsQuote q : quotes) {
-                    if (q.getSymbol() == null) continue;
+                if (resp.getBody() == null || resp.getBody().getData() == null) continue;
 
-                    // Prefer earningsTimestampStart; fall back to earningsTimestamp
-                    Long ts = q.getEarningsTimestampStart() != null
-                            ? q.getEarningsTimestampStart()
-                            : q.getEarningsTimestamp();
-                    if (ts == null) continue;
+                List<NasdaqEarningsRow> rows = resp.getBody().getData().getRows();
+                if (rows == null) continue;
 
-                    LocalDate reportDate = Instant.ofEpochSecond(ts)
-                            .atZone(ZoneId.of("America/New_York")).toLocalDate();
-                    if (reportDate.isBefore(today) || reportDate.isAfter(cutoff)) continue;
+                String dateStr = date.toString();
+                for (NasdaqEarningsRow row : rows) {
+                    if (row.getSymbol() == null || row.getSymbol().isBlank()) continue;
 
-                    String name = q.getLongName() != null ? q.getLongName() : q.getShortName();
-                    Double estimate = q.getEpsForward() != null ? q.getEpsForward()
-                                    : q.getEpsCurrentYear();
+                    String sym = row.getSymbol().trim();
+                    // Skip symbols with special chars (preferred shares, warrants, etc.)
+                    if (sym.contains("/") || sym.contains("+") || sym.length() > 5) continue;
 
-                    Long cap = q.getMarketCap() != null && q.getMarketCap() > 0
-                            ? q.getMarketCap().longValue() : null;
+                    Double estimate  = parseDouble(row.getEpsForecast());
+                    Double lastYear  = parseDouble(row.getLastYearEPS());
+                    Long   cap       = parseMarketCap(row.getMarketCap());
+                    Integer analysts = parseInteger(row.getNoOfEst());
+
+                    String reportTime = normalizeReportTime(row.getTime());
 
                     items.add(EarningsCalendarItem.builder()
-                            .symbol(q.getSymbol())
-                            .name(name)
-                            .reportDate(reportDate.toString())
-                            .fiscalDateEnding(reportDate.toString())
-                            .estimate(estimate)
-                            .currency("USD")
-                            .marketCap(cap)
-                            .build());
+                        .symbol(sym)
+                        .name(row.getName())
+                        .reportDate(dateStr)
+                        .fiscalDateEnding(dateStr)
+                        .estimate(estimate)
+                        .lastYearEPS(lastYear)
+                        .currency("USD")
+                        .marketCap(cap)
+                        .reportTime(reportTime)
+                        .analystCount(analysts)
+                        .build());
                 }
-
-                // If the first page had fewer than 250, no need to fetch next
-                if (quotes.size() < 250) break;
+            } catch (Exception e) {
+                log.warn("Nasdaq earnings fetch failed for {}: {}", date, e.getMessage());
             }
-        } catch (Exception e) {
-            log.warn("YF earnings calendar fetch failed: {}", e.getMessage());
         }
 
         items.sort(Comparator.comparing(EarningsCalendarItem::getReportDate));
+        log.info("Nasdaq earnings raw fetch: {} companies across {} trading days", items.size(), tradingDaysFetched);
         return items;
+    }
+
+    private String normalizeReportTime(String time) {
+        if (time == null || time.isBlank() || time.equalsIgnoreCase("Time Not Supplied")) return null;
+        String t = time.toLowerCase();
+        if (t.contains("before") || t.contains("bmo")) return "Pre-Market";
+        if (t.contains("after")  || t.contains("amc")) return "After-Hours";
+        return time;
+    }
+
+    private Long parseMarketCap(String s) {
+        if (s == null || s.isBlank() || s.equals("N/A")) return null;
+        try {
+            String mc = s.replace("$", "").replace(",", "").trim();
+            if (mc.endsWith("T")) return (long)(Double.parseDouble(mc.replace("T","")) * 1_000_000_000_000L);
+            if (mc.endsWith("B")) return (long)(Double.parseDouble(mc.replace("B","")) * 1_000_000_000L);
+            if (mc.endsWith("M")) return (long)(Double.parseDouble(mc.replace("M","")) * 1_000_000L);
+        } catch (Exception ignored) {}
+        return null;
+    }
+
+    private Integer parseInteger(String s) {
+        if (s == null || s.isBlank() || s.equals("N/A")) return null;
+        try { return Integer.parseInt(s.trim()); }
+        catch (NumberFormatException ignored) { return null; }
     }
 
     // ─── Alpha Vantage fallback ───────────────────────────────────────────────────
@@ -259,32 +287,33 @@ public class EarningsService {
     // ─── Helpers ─────────────────────────────────────────────────────────────────
 
     private Double parseDouble(String s) {
-        if (s == null || s.isBlank() || s.equals("None") || s.equals("-")) return null;
+        if (s == null || s.isBlank() || s.equals("None") || s.equals("-") || s.equals("N/A")) return null;
         try { return Double.parseDouble(s.trim()); }
         catch (NumberFormatException e) { return null; }
     }
 
-    // ─── YF DTOs ─────────────────────────────────────────────────────────────────
+    // ─── Nasdaq DTOs ─────────────────────────────────────────────────────────────
 
     @Data @JsonIgnoreProperties(ignoreUnknown = true)
-    static class YfEarningsResp { private YfEarningsWrapper finance; }
+    static class NasdaqEarningsResp {
+        private NasdaqEarningsData data;
+    }
 
     @Data @JsonIgnoreProperties(ignoreUnknown = true)
-    static class YfEarningsWrapper { private List<YfEarningsResult> result; }
+    static class NasdaqEarningsData {
+        private List<NasdaqEarningsRow> rows;
+    }
 
     @Data @JsonIgnoreProperties(ignoreUnknown = true)
-    static class YfEarningsResult { private int total; private List<YfEarningsQuote> quotes; }
-
-    @Data @JsonIgnoreProperties(ignoreUnknown = true)
-    static class YfEarningsQuote {
-        private String  symbol;
-        private String  shortName;
-        private String  longName;
-        private Long    earningsTimestamp;
-        private Long    earningsTimestampStart;
-        private Long    earningsTimestampEnd;
-        private Double  epsForward;
-        private Double  epsCurrentYear;
-        private Double  marketCap;
+    static class NasdaqEarningsRow {
+        private String symbol;
+        private String name;
+        @JsonProperty("marketCap")   private String marketCap;
+        @JsonProperty("eps_forecast") private String epsForecast;
+        @JsonProperty("eps_actual")   private String epsActual;
+        @JsonProperty("lastYearRptDt") private String lastYearRptDt;
+        @JsonProperty("lastYearEPS")   private String lastYearEPS;
+        private String time;
+        @JsonProperty("noOfEst")      private String noOfEst;
     }
 }

@@ -11,6 +11,9 @@ public class EarningsCalendarItem {
     private String reportDate;
     private String fiscalDateEnding;
     private Double estimate;
+    private Double lastYearEPS;
     private String currency;
     private Long   marketCap;
+    private String reportTime;   // "Before Market Open", "After Market Close", etc.
+    private Integer analystCount;
 }
