@@ -28,13 +28,15 @@ public class AgentController {
     private final AgentService agentService;
 
     // ── Rate limiting ────────────────────────────────────────────────────────────
-    private static final int    MAX_REQUESTS_PER_HOUR = 10;
+    private static final int    MAX_QUERY_PER_HOUR    = 20;   // chat / briefing
+    private static final int    MAX_INSIGHTS_PER_HOUR = 100;  // insights cached 4h, real Claude calls are rare
     private static final int    MAX_QUESTION_LENGTH   = 500;
-    private static final int    MAX_HISTORY_TURNS     = 6;   // last N turns sent to Claude
+    private static final int    MAX_HISTORY_TURNS     = 6;    // last N turns sent to Claude
     private static final long   WINDOW_MS             = 60 * 60 * 1000L; // 1 hour
 
-    /** IP → timestamps of recent requests within the rolling window. */
-    private final ConcurrentHashMap<String, Deque<Long>> rateLimitMap = new ConcurrentHashMap<>();
+    /** Separate buckets so insights page-views don't burn chat quota. */
+    private final ConcurrentHashMap<String, Deque<Long>> queryRateLimitMap    = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Deque<Long>> insightsRateLimitMap = new ConcurrentHashMap<>();
 
     private String clientIp(HttpServletRequest req) {
         String forwarded = req.getHeader("X-Forwarded-For");
@@ -44,18 +46,14 @@ public class AgentController {
         return req.getRemoteAddr();
     }
 
-    /** Returns true if the IP has exceeded the hourly limit. */
-    private boolean isRateLimited(String ip) {
+    private boolean isRateLimited(String ip, ConcurrentHashMap<String, Deque<Long>> map, int maxPerHour) {
         long now = System.currentTimeMillis();
-        Deque<Long> timestamps = rateLimitMap.computeIfAbsent(ip, k -> new ArrayDeque<>());
+        Deque<Long> timestamps = map.computeIfAbsent(ip, k -> new ArrayDeque<>());
         synchronized (timestamps) {
-            // Drop entries older than the window
             while (!timestamps.isEmpty() && now - timestamps.peekFirst() > WINDOW_MS) {
                 timestamps.pollFirst();
             }
-            if (timestamps.size() >= MAX_REQUESTS_PER_HOUR) {
-                return true;
-            }
+            if (timestamps.size() >= maxPerHour) return true;
             timestamps.addLast(now);
             return false;
         }
@@ -70,7 +68,7 @@ public class AgentController {
             @RequestParam(defaultValue = "EQUITY") String assetType,
             HttpServletRequest httpReq) {
         String ip = clientIp(httpReq);
-        if (isRateLimited(ip)) {
+        if (isRateLimited(ip, insightsRateLimitMap, MAX_INSIGHTS_PER_HOUR)) {
             return ResponseEntity.status(429).body(
                 com.marketfeed.model.StockInsight.builder()
                     .symbol(symbol.toUpperCase())
@@ -93,10 +91,10 @@ public class AgentController {
     public ResponseEntity<BriefingResponse> briefing(@RequestBody BriefingRequest request,
                                                       HttpServletRequest httpReq) {
         String ip = clientIp(httpReq);
-        if (isRateLimited(ip)) {
+        if (isRateLimited(ip, queryRateLimitMap, MAX_QUERY_PER_HOUR)) {
             log.warn("Rate limit hit on /briefing from {}", ip);
             return ResponseEntity.status(429).body(
-                    BriefingResponse.builder().error("Rate limit reached — try again later (10 requests/hour).").build());
+                    BriefingResponse.builder().error("Rate limit reached — try again later (20 requests/hour).").build());
         }
         if (request.getSymbols() == null || request.getSymbols().isEmpty()) {
             return ResponseEntity.badRequest().body(
@@ -115,10 +113,10 @@ public class AgentController {
                                                HttpServletRequest httpReq) {
         // 1. Rate limit
         String ip = clientIp(httpReq);
-        if (isRateLimited(ip)) {
+        if (isRateLimited(ip, queryRateLimitMap, MAX_QUERY_PER_HOUR)) {
             log.warn("Rate limit hit on /query from {}", ip);
             return ResponseEntity.status(429).body(
-                    AgentResponse.builder().error("Rate limit reached — you can ask 10 questions per hour.").build());
+                    AgentResponse.builder().error("Rate limit reached — you can ask 20 questions per hour.").build());
         }
 
         // 2. Input length guard
