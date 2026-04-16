@@ -52,13 +52,33 @@ public class ScreenerService {
     // Live price overlay: symbol → [price, changePercent]
     private final ConcurrentHashMap<String, double[]> priceCache = new ConcurrentHashMap<>();
 
-    // Shared thread pool for both universe fetch and price refresh
+    // Stored universe — avoids the Spring self-call proxy bypass in refreshPrices()
+    // @Cacheable only works through the Spring AOP proxy; calling this.getUniverse()
+    // from within the same class bypasses the proxy and re-fetches on every call.
+    private volatile List<Fundamentals> storedUniverse = List.of();
+
+    // Shared thread pool for universe fetch and price refresh
     private final ExecutorService pool = Executors.newFixedThreadPool(8);
 
     // ── Universe fetch ────────────────────────────────────────────────────────
 
     @Cacheable(value = "screener-universe", key = "'all'", unless = "#result == null || #result.isEmpty()")
     public List<Fundamentals> getUniverse() {
+        List<Fundamentals> result = fetchUniverseFromYF();
+        if (!result.isEmpty()) storedUniverse = result;
+        return result;
+    }
+
+    // Hourly background refresh — bypasses Spring proxy intentionally,
+    // updates storedUniverse so refreshPrices() always has fresh symbols.
+    @Scheduled(initialDelay = 3_600_000, fixedDelay = 3_600_000)
+    public void refreshUniverse() {
+        List<Fundamentals> fresh = fetchUniverseFromYF();
+        if (!fresh.isEmpty()) storedUniverse = fresh;
+    }
+
+    // The actual YF fetch, extracted so both getUniverse() and refreshUniverse() can call it.
+    private List<Fundamentals> fetchUniverseFromYF() {
         String crumb = crumbService.getCrumb();
         if (crumb == null) {
             log.error("Cannot fetch screener universe — no YF crumb");
@@ -115,12 +135,10 @@ public class ScreenerService {
 
     @Scheduled(fixedDelay = 60_000, initialDelay = 90_000)
     public void refreshPrices() {
-        List<Fundamentals> universe;
-        try {
-            universe = getUniverse();
-        } catch (Exception e) {
-            return;
-        }
+        // Use storedUniverse directly — do NOT call this.getUniverse() here.
+        // Calling getUniverse() from within the same class bypasses the @Cacheable
+        // proxy and triggers a full YF re-fetch every 60s, causing OOM.
+        List<Fundamentals> universe = storedUniverse;
         if (universe.isEmpty()) return;
 
         String crumb = crumbService.getCrumb();
