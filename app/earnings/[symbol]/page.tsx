@@ -332,8 +332,8 @@ export default function EarningsSymbolPage() {
                 {quote?.name && (
                   <p className="text-slate-400 text-sm mt-0.5">{quote.name}</p>
                 )}
-                {quote?.marketCap > 0 && (
-                  <p className="text-[11px] text-slate-700 mt-0.5">{fmtLarge(quote.marketCap)}</p>
+                {(quote?.marketCap ?? 0) > 0 && (
+                  <p className="text-[11px] text-slate-700 mt-0.5">{fmtLarge(quote?.marketCap ?? 0)}</p>
                 )}
               </div>
               <div className="text-right">
