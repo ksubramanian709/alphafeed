@@ -265,6 +265,113 @@ public class AgentService {
         }
     }
 
+    // ─── Per-ticker AI insights ──────────────────────────────────────────────────
+
+    @org.springframework.cache.annotation.Cacheable(value = "insights", key = "#symbol.toUpperCase()")
+    public StockInsight getInsights(String symbol) {
+        if (anthropicKey == null || anthropicKey.isBlank()) {
+            return StockInsight.builder().symbol(symbol).error("ANTHROPIC_API_KEY not configured").generatedAt(Instant.now()).build();
+        }
+
+        String sym = symbol.toUpperCase();
+        StringBuilder ctx = new StringBuilder();
+        ctx.append("Symbol: ").append(sym).append("\n");
+        ctx.append("Date: ").append(LocalDate.now()).append("\n\n");
+
+        // Quote
+        try {
+            ApiResponse<Quote> qr = quoteService.getQuote(sym);
+            if (qr.getData() != null) {
+                Quote q = qr.getData();
+                ctx.append("Company: ").append(q.getName()).append("\n");
+                String sign = q.getChangePercent() >= 0 ? "+" : "";
+                ctx.append("Price: $").append(String.format("%.2f", q.getPrice()))
+                   .append(" (").append(sign).append(String.format("%.2f", q.getChangePercent())).append("% today)\n");
+                if (q.getMarketCap() > 0) {
+                    double cap = q.getMarketCap();
+                    String capStr = cap >= 1e12 ? String.format("$%.2fT", cap / 1e12)
+                                  : cap >= 1e9  ? String.format("$%.1fB", cap / 1e9) : String.format("$%.0fM", cap / 1e6);
+                    ctx.append("Market Cap: ").append(capStr).append("\n");
+                }
+                if (q.getFiftyTwoWeekHigh() > 0 && q.getFiftyTwoWeekLow() > 0) {
+                    ctx.append(String.format("52W Range: $%.2f – $%.2f\n", q.getFiftyTwoWeekLow(), q.getFiftyTwoWeekHigh()));
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Insights: quote fetch failed for {}", sym);
+        }
+
+        // Recent news (up to 6 headlines)
+        try {
+            ApiResponse<List<NewsItem>> nr = newsService.getTickerNews(sym);
+            if (nr.getData() != null && !nr.getData().isEmpty()) {
+                ctx.append("\nRecent news:\n");
+                nr.getData().stream().limit(6).forEach(n -> ctx.append("- ").append(n.getTitle()).append("\n"));
+            }
+        } catch (Exception e) {
+            log.warn("Insights: news fetch failed for {}", sym);
+        }
+
+        String prompt = "You are a sharp equity analyst. Analyze " + sym + " and return ONLY a JSON object — no markdown, no explanation, just the raw JSON.\n\n"
+            + "Context:\n" + ctx + "\n"
+            + "Return this exact JSON shape:\n"
+            + "{\n"
+            + "  \"sentiment\": \"bullish\" | \"bearish\" | \"neutral\",\n"
+            + "  \"summary\": \"2-3 sentence big-picture take on the stock right now, grounded in the data above\",\n"
+            + "  \"bullPoints\": [\"specific bull argument 1\", \"specific bull argument 2\", \"specific bull argument 3\"],\n"
+            + "  \"bearPoints\": [\"specific bear argument 1\", \"specific bear argument 2\", \"specific bear argument 3\"],\n"
+            + "  \"keyRisk\": \"single biggest near-term risk in one sentence\",\n"
+            + "  \"catalyst\": \"next near-term catalyst (earnings date, product launch, macro event, etc.)\"\n"
+            + "}\n\n"
+            + "Rules: be specific and data-driven, never generic. Each bullet max 20 words. Use the price action and news above.";
+
+        try {
+            List<Map<String, Object>> messages = List.of(Map.of("role", "user", "content", prompt));
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("model",      model);
+            body.put("max_tokens", 800);
+            body.put("messages",   messages);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("x-api-key",         anthropicKey);
+            headers.set("anthropic-version", "2023-06-01");
+
+            ResponseEntity<Map> resp = restTemplate.exchange(
+                    ANTHROPIC_URL, HttpMethod.POST, new HttpEntity<>(body, headers), Map.class);
+
+            if (resp.getBody() == null) throw new RuntimeException("Empty Claude response");
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> content = (List<Map<String, Object>>) resp.getBody().get("content");
+            String raw = (String) content.get(0).get("text");
+
+            int start = raw.indexOf('{');
+            int end   = raw.lastIndexOf('}');
+            if (start == -1 || end == -1) throw new RuntimeException("No JSON in response");
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> parsed = objectMapper.readValue(raw.substring(start, end + 1), Map.class);
+
+            @SuppressWarnings("unchecked") List<String> bulls = (List<String>) parsed.getOrDefault("bullPoints", List.of());
+            @SuppressWarnings("unchecked") List<String> bears = (List<String>) parsed.getOrDefault("bearPoints", List.of());
+
+            return StockInsight.builder()
+                    .symbol(sym)
+                    .sentiment((String) parsed.getOrDefault("sentiment", "neutral"))
+                    .summary((String) parsed.getOrDefault("summary", ""))
+                    .bullPoints(bulls)
+                    .bearPoints(bears)
+                    .keyRisk((String) parsed.getOrDefault("keyRisk", ""))
+                    .catalyst((String) parsed.getOrDefault("catalyst", ""))
+                    .generatedAt(Instant.now())
+                    .build();
+
+        } catch (Exception e) {
+            log.error("Insights generation failed for {}: {}", sym, e.getMessage());
+            return StockInsight.builder().symbol(sym).error("Analysis unavailable: " + e.getMessage()).generatedAt(Instant.now()).build();
+        }
+    }
+
     // ─── Agentic loop ────────────────────────────────────────────────────────────
 
     @SuppressWarnings("unchecked")

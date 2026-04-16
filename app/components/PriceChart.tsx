@@ -23,18 +23,19 @@ interface ChartPoint {
 }
 
 const RANGES = [
-  { label: '1m',  interval: '1m',  range: '1d'  },
-  { label: '5m',  interval: '5m',  range: '1d'  },
-  { label: '1h',  interval: '60m', range: '5d'  },
   { label: '1D',  interval: '5m',  range: '1d'  },
-  { label: '1W',  interval: '60m', range: '5d'  },
+  { label: '5D',  interval: '60m', range: '5d'  },
   { label: '1M',  interval: '1d',  range: '1mo' },
+  { label: '3M',  interval: '1d',  range: '3mo' },
+  { label: '6M',  interval: '1d',  range: '6mo' },
+  { label: 'YTD', interval: '1d',  range: 'ytd' },
   { label: '1Y',  interval: '1d',  range: '1y'  },
+  { label: '5Y',  interval: '1wk', range: '5y'  },
 ]
 
 function formatLabel(epoch: number, interval: string): string {
   const d = new Date(epoch * 1000)
-  if (interval === '1m' || interval === '5m' || interval === '60m') {
+  if (interval === '5m' || interval === '60m') {
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   }
   if (interval === '1wk') {
@@ -43,13 +44,12 @@ function formatLabel(epoch: number, interval: string): string {
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' })
 }
 
-// Defined outside component so Recharts never remounts it on re-render
 function CustomTooltip({ active, payload, color }: any) {
   if (!active || !payload?.length) return null
   return (
     <div className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs pointer-events-none">
       <span className="font-mono" style={{ color }}>
-        {payload[0].value.toFixed(2)}
+        ${payload[0].value.toFixed(2)}
       </span>
       <span className="text-slate-500 ml-2">{payload[0].payload.label}</span>
     </div>
@@ -61,9 +61,9 @@ interface Props {
 }
 
 export default function PriceChart({ symbol }: Props) {
-  const [data, setData]         = useState<ChartPoint[]>([])
-  const [selected, setSelected] = useState(0)
-  const [loading, setLoading]   = useState(false)
+  const [data, setData]           = useState<ChartPoint[]>([])
+  const [selected, setSelected]   = useState(0)
+  const [loading, setLoading]     = useState(false)
   const [openPrice, setOpenPrice] = useState(0)
 
   async function loadChart(rangeIdx: number) {
@@ -93,37 +93,59 @@ export default function PriceChart({ symbol }: Props) {
 
   useEffect(() => { loadChart(0) }, [symbol])
 
-  const lastPrice = data.length ? data[data.length - 1].price : 0
-  const isUp = lastPrice >= openPrice
-  const color = isUp ? '#22c55e' : '#ef4444'
-  const gradId = `grad-${symbol.replace(/[^a-z0-9]/gi, '')}`
+  const lastPrice  = data.length ? data[data.length - 1].price : 0
+  const isUp       = lastPrice >= openPrice
+  const color      = isUp ? '#22c55e' : '#ef4444'
+  const gradId     = `grad-${symbol.replace(/[^a-z0-9]/gi, '')}`
+  const returnPct  = openPrice > 0 ? ((lastPrice - openPrice) / openPrice) * 100 : null
+  const returnSign = returnPct !== null && returnPct >= 0 ? '+' : ''
 
   const minPrice = data.length ? Math.min(...data.map(d => d.price)) * 0.999 : 0
   const maxPrice = data.length ? Math.max(...data.map(d => d.price)) * 1.001 : 0
 
   return (
-    <div className="mt-3">
-      {/* Timeframe buttons */}
-      <div className="flex gap-1 mb-3">
-        {RANGES.map((r, i) => (
-          <button
-            key={r.label}
-            onClick={() => loadChart(i)}
-            className={`text-xs px-2 py-1 rounded transition-colors ${
-              selected === i
-                ? 'bg-slate-600 text-slate-100'
-                : 'text-slate-500 hover:text-slate-300'
+    <div className="mt-1">
+      {/* Range selector + return badge */}
+      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+        <div className="flex gap-0.5">
+          {RANGES.map((r, i) => (
+            <button
+              key={r.label}
+              onClick={() => loadChart(i)}
+              className={`text-xs px-2.5 py-1 rounded-md transition-colors font-medium ${
+                selected === i
+                  ? 'bg-slate-700 text-slate-100'
+                  : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/60'
+              }`}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Period return badge */}
+        {returnPct !== null && data.length > 0 && (
+          <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-mono font-semibold
+            ${isUp
+              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+              : 'bg-red-500/10 text-red-400 border border-red-500/20'
             }`}
           >
-            {r.label}
-          </button>
-        ))}
+            <span>{isUp ? '▲' : '▼'}</span>
+            <span>{returnSign}{returnPct.toFixed(2)}%</span>
+            <span className="text-xs opacity-60 font-normal">{RANGES[selected].label}</span>
+          </div>
+        )}
       </div>
 
-      {loading && <div className="h-40 flex items-center justify-center text-slate-600 text-xs">Loading…</div>}
+      {loading && (
+        <div className="h-48 flex items-center justify-center text-slate-600 text-xs animate-pulse">
+          Loading…
+        </div>
+      )}
 
       {!loading && data.length > 0 && (
-        <ResponsiveContainer width="100%" height={160}>
+        <ResponsiveContainer width="100%" height={200}>
           <AreaChart data={data} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
@@ -143,8 +165,8 @@ export default function PriceChart({ symbol }: Props) {
               tick={{ fill: '#475569', fontSize: 10 }}
               tickLine={false}
               axisLine={false}
-              tickFormatter={v => v.toFixed(0)}
-              width={45}
+              tickFormatter={v => `$${v.toFixed(0)}`}
+              width={52}
             />
             <Tooltip content={<CustomTooltip color={color} />} />
             <ReferenceLine y={openPrice} stroke="#334155" strokeDasharray="3 3" />
@@ -159,6 +181,12 @@ export default function PriceChart({ symbol }: Props) {
             />
           </AreaChart>
         </ResponsiveContainer>
+      )}
+
+      {!loading && data.length === 0 && (
+        <div className="h-48 flex items-center justify-center text-slate-700 text-xs">
+          No chart data available
+        </div>
       )}
     </div>
   )

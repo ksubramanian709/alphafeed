@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import MarketsOverview from './components/MarketsOverview'
 import QuoteSearch from './components/QuoteSearch'
 import NewsFeed from './components/NewsFeed'
@@ -9,112 +10,122 @@ import AgentChat from './components/AgentChat'
 
 export default function Home() {
   return (
-    <main className="max-w-4xl mx-auto px-4 py-10 space-y-10">
+    <main className="max-w-7xl mx-auto px-4 py-8 space-y-8">
 
-      {/* ── Header ─────────────────────────────────────────────────── */}
-      <div className="text-center pb-8 border-b border-slate-800/60 relative overflow-hidden">
-
-        {/* Background glow */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="w-80 h-40 bg-emerald-500/5 rounded-full blur-3xl" />
-        </div>
-
-        {/* Logo card */}
-        <div className="relative flex justify-center mb-5">
-          <div className="relative inline-flex">
-            {/* Outer glow ring */}
-            <div className="absolute -inset-1 bg-emerald-500/20 rounded-2xl blur-lg" />
-            {/* Card */}
-            <div className="relative bg-[#0d1117] border border-slate-700/70 rounded-2xl px-5 py-4 flex items-center gap-4 shadow-2xl">
-
-              {/* Chart icon */}
-              <svg width="42" height="32" viewBox="0 0 42 32" fill="none" aria-hidden="true">
-                {/* Volume bars */}
-                <rect x="1"  y="27" width="5" height="5"  fill="#22c55e" opacity="0.25" rx="1"/>
-                <rect x="9"  y="25" width="5" height="7"  fill="#22c55e" opacity="0.25" rx="1"/>
-                <rect x="17" y="23" width="5" height="9"  fill="#22c55e" opacity="0.25" rx="1"/>
-                <rect x="25" y="20" width="5" height="12" fill="#22c55e" opacity="0.25" rx="1"/>
-                <rect x="33" y="18" width="5" height="14" fill="#22c55e" opacity="0.25" rx="1"/>
-                {/* Rising line */}
-                <polyline
-                  points="3,22 11,16 19,18 27,9 35,5"
-                  stroke="#22c55e"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  fill="none"
-                />
-                {/* Line dots */}
-                <circle cx="11" cy="16" r="2.5" fill="#22c55e"/>
-                <circle cx="27" cy="9"  r="2.5" fill="#22c55e"/>
-                <circle cx="35" cy="5"  r="2.5" fill="#16a34a"/>
-                {/* Glow on last dot */}
-                <circle cx="35" cy="5"  r="5" fill="#22c55e" opacity="0.15"/>
-              </svg>
-
-              {/* Wordmark */}
-              <span className="text-3xl font-bold tracking-tight leading-none select-none">
-                <span className="text-emerald-400">Alpha</span>
-                <span className="text-white">Feed</span>
-              </span>
-
-              {/* Live badge */}
-              <span className="flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-2.5 py-1 text-[10px] font-semibold text-emerald-400 tracking-widest uppercase">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Live
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Tagline */}
-        <p className="text-slate-400 text-sm tracking-wide">
+      {/* ── Hero ───────────────────────────────────────────────────── */}
+      <div className="text-center pt-4 pb-2">
+        <h1 className="text-3xl font-bold tracking-tight mb-2">
+          <span className="text-emerald-400">Alpha</span>
+          <span className="text-slate-100">Feed</span>
+        </h1>
+        <p className="text-slate-500 text-sm mb-6">
           Real-time market intelligence &middot; AI-powered analysis
         </p>
 
-        {/* Market coverage strip */}
-        <div className="flex items-center justify-center gap-2 mt-3 flex-wrap">
-          {['NYSE', 'NASDAQ', 'Crypto', 'Commodities', 'Forex', 'Macro'].map((label, i, arr) => (
-            <span key={label} className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 tracking-wide">{label}</span>
-              {i < arr.length - 1 && <span className="text-slate-700 text-xs">·</span>}
+        {/* Search — centrepiece */}
+        <div className="max-w-xl mx-auto">
+          <QuoteSearch />
+        </div>
+
+        {/* Market coverage tags */}
+        <div className="flex items-center justify-center gap-3 mt-5 flex-wrap">
+          {['NYSE', 'NASDAQ', 'Crypto', 'Commodities', 'Forex', 'Macro'].map(label => (
+            <span key={label} className="text-[10px] uppercase tracking-widest text-slate-600 border border-slate-800 px-2.5 py-1 rounded-full">
+              {label}
             </span>
           ))}
         </div>
       </div>
 
-      {/* Markets overview strip */}
+      {/* ── Markets strip ───────────────────────────────────────────── */}
       <section>
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-3">
-          Markets
-        </h2>
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-600 mb-3">Live Markets</p>
         <MarketsOverview />
       </section>
 
-      {/* Ticker search */}
-      <QuoteSearch />
+      {/* ── Screener CTA ────────────────────────────────────────────── */}
+      <Link href="/screener" className="block group">
+        <div className="relative overflow-hidden rounded-2xl border border-slate-700/60 bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/30 p-6 hover:border-emerald-500/40 transition-all duration-300">
 
-      {/* Market news */}
-      <NewsFeed limit={6} title="Market Headlines" />
+          {/* Background grid pattern */}
+          <div className="absolute inset-0 opacity-[0.03]"
+            style={{ backgroundImage: 'linear-gradient(#22c55e 1px, transparent 1px), linear-gradient(90deg, #22c55e 1px, transparent 1px)', backgroundSize: '40px 40px' }}
+          />
 
-      {/* Commodity dashboard */}
+          {/* Glow */}
+          <div className="absolute top-0 right-0 w-64 h-32 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                  New
+                </span>
+                <span className="text-[10px] text-slate-600 uppercase tracking-widest">Feature</span>
+              </div>
+              <h2 className="text-xl font-bold text-slate-100 mb-1">Stock Screener</h2>
+              <p className="text-sm text-slate-400 max-w-md">
+                Filter 3,600+ US-listed equities by P/E, market cap, EPS, dividend yield, beta, and more. Prices refresh every 60 seconds.
+              </p>
+
+              {/* Preset pills */}
+              <div className="flex flex-wrap gap-2 mt-4">
+                {[
+                  { label: 'Value Stocks',  sub: 'P/E < 20' },
+                  { label: 'High Growth',   sub: 'Rev > 15%' },
+                  { label: 'Dividend',      sub: 'Yield > 2%' },
+                  { label: 'Low Volatility',sub: 'Beta < 0.8' },
+                  { label: 'High ROE',      sub: '> 20%' },
+                ].map(p => (
+                  <span key={p.label} className="flex items-center gap-1.5 bg-slate-800/80 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-400 group-hover:border-slate-600 transition-colors">
+                    <span className="text-slate-300">{p.label}</span>
+                    <span className="text-slate-600">{p.sub}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="shrink-0">
+              <span className="inline-flex items-center gap-2 bg-emerald-600 group-hover:bg-emerald-500 text-white font-semibold text-sm px-5 py-2.5 rounded-xl transition-colors">
+                Open Screener
+                <svg className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </span>
+            </div>
+          </div>
+        </div>
+      </Link>
+
+      {/* ── Main 2-column grid ──────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        {/* Left column: news + earnings */}
+        <div className="lg:col-span-2 space-y-6">
+          <NewsFeed limit={8} title="Market Headlines" />
+          <EarningsCalendar />
+        </div>
+
+        {/* Right column: watchlist + agent */}
+        <div className="space-y-6">
+          <Watchlist />
+          <AgentChat />
+        </div>
+
+      </div>
+
+      {/* ── Full-width data sections ────────────────────────────────── */}
       <CommodityDashboard />
-
-      {/* Macro indicators (FRED) */}
       <MacroIndicators />
 
-      {/* Earnings calendar */}
-      <EarningsCalendar />
-
-      {/* Watchlist with live WebSocket prices */}
-      <Watchlist />
-
-      {/* Agent chat */}
-      <AgentChat />
-
-      {/* Footer */}
-      <div className="border-t border-slate-800 pt-4 text-xs text-slate-700 flex justify-between">
-        <span>Sources: Yahoo Finance · Alpha Vantage · FRED · Brave Search</span>
+      {/* ── Footer ──────────────────────────────────────────────────── */}
+      <div className="border-t border-slate-800/60 pt-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-700">
+        <div className="flex items-center gap-1.5">
+          <span className="text-emerald-600 font-semibold">Alpha</span>
+          <span>Feed</span>
+          <span className="text-slate-800 mx-1">·</span>
+          <span>Yahoo Finance · Alpha Vantage · FRED · Brave Search</span>
+        </div>
         <a
           href="https://github.com/ksubramanian709/alphafeed"
           target="_blank"

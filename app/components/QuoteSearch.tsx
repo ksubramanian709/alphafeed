@@ -75,6 +75,9 @@ export default function QuoteSearch() {
             onFocus={() => { if (suggestions.length > 0) setShowDrop(true) }}
             onKeyDown={onKeyDown}
             placeholder="Search by name or ticker — Apple, palantir, crude oil…"
+            autoComplete="off"
+            spellCheck={false}
+            translate="no"
             className="flex-1 bg-slate-900 border border-slate-700 rounded px-3 py-2.5 text-sm
                        placeholder-slate-600 focus:outline-none focus:border-slate-500"
           />

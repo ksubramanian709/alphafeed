@@ -120,11 +120,18 @@ export default function AgentChat() {
         }),
       })
       const json = await res.json()
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        text: json.answer ?? json.error ?? 'No response',
-        symbols: json.symbolsAnalyzed,
-      }])
+      if (res.status === 429) {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          text: '⚠️ ' + (json.error ?? 'Rate limit reached — try again in an hour.'),
+        }])
+      } else {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          text: json.answer ?? json.error ?? 'No response',
+          symbols: json.symbolsAnalyzed,
+        }])
+      }
     } catch {
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -153,7 +160,7 @@ export default function AgentChat() {
   const showSuggestions = messages.length === 0
 
   return (
-    <section>
+    <section className="bg-slate-900 border border-slate-800 rounded-xl p-4">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500">
           Market Assistant
@@ -197,7 +204,7 @@ export default function AgentChat() {
 
       {/* Message thread */}
       {messages.length > 0 && (
-        <div className="space-y-3 mb-4 max-h-[520px] overflow-y-auto pr-1 scroll-smooth">
+        <div className="space-y-3 mb-4 max-h-[640px] overflow-y-auto pr-1 scroll-smooth">
           {messages.map((m, i) => (
             <div key={i} className={m.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
               {m.role === 'user' ? (
@@ -242,7 +249,7 @@ export default function AgentChat() {
       )}
 
       {/* Input */}
-      <div className="flex gap-2 items-end">
+      <div className="flex gap-2 items-end mt-2">
         <textarea
           ref={inputRef}
           value={input}
@@ -250,18 +257,18 @@ export default function AgentChat() {
           onKeyDown={onKeyDown}
           placeholder="Ask anything about markets — stocks, rates, commodities, macro, strategy…"
           disabled={loading}
-          rows={1}
-          className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm
+          rows={2}
+          className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm
                      placeholder-slate-600 focus:outline-none focus:border-slate-500
-                     disabled:opacity-40 resize-none leading-relaxed"
+                     disabled:opacity-40 resize-none leading-relaxed min-h-[64px]"
         />
         <button
           onClick={() => send(input)}
           disabled={loading || !input.trim()}
-          className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-xl text-sm font-medium
-                     disabled:opacity-40 transition-colors shrink-0"
+          className="px-4 py-3 bg-emerald-700 hover:bg-emerald-600 rounded-xl text-sm font-semibold
+                     disabled:opacity-40 transition-colors shrink-0 text-white"
         >
-          {loading ? '…' : 'Ask'}
+          {loading ? '…' : '↑'}
         </button>
       </div>
       <p className="text-xs text-slate-700 mt-1.5">Shift+Enter for new line · Enter to send</p>

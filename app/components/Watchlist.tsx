@@ -74,7 +74,15 @@ export default function Watchlist() {
   useEffect(() => {
     if (!hydrated.current) {
       hydrated.current = true
-      setSymbols(loadSavedSymbols())
+      const syms = loadSavedSymbols()
+      setSymbols(syms)
+      // REST seed — populate quotes immediately without waiting for WebSocket
+      syms.forEach(sym => {
+        fetch(`${API}/v1/quote/${encodeURIComponent(sym)}`)
+          .then(r => r.json())
+          .then(j => { if (j?.data && !j.data.error) setQuotes(prev => ({ ...prev, [sym]: j.data })) })
+          .catch(() => {})
+      })
     }
   }, [])
 
@@ -158,6 +166,11 @@ export default function Watchlist() {
     setInput('')
     setShowDrop(false)
     setSuggestions([])
+    // REST seed for the new symbol
+    fetch(`${API}/v1/quote/${encodeURIComponent(sym)}`)
+      .then(r => r.json())
+      .then(j => { if (j?.data && !j.data.error) setQuotes(prev => ({ ...prev, [sym]: j.data })) })
+      .catch(() => {})
   }
 
   function removeSymbol(sym: string) {
@@ -296,18 +309,6 @@ export default function Watchlist() {
         </div>
       ) : (
         <div className="rounded-lg border border-slate-800 overflow-hidden">
-          {/* Column headers */}
-          <div className="grid grid-cols-[20px_1fr_auto] items-center px-4 py-1.5 bg-slate-950 border-b border-slate-800">
-            <span />
-            <span className="text-xs text-slate-600 uppercase tracking-wider">Symbol</span>
-            <div className="flex items-center gap-6">
-              <span className="text-xs text-slate-600 uppercase tracking-wider w-24 text-right hidden md:block">Range</span>
-              <span className="text-xs text-slate-600 uppercase tracking-wider w-20 text-right">Change</span>
-              <span className="text-xs text-slate-600 uppercase tracking-wider w-24 text-right">Price</span>
-              <span className="w-5" />
-            </div>
-          </div>
-
           {symbols.map((sym, idx) => {
             const q    = quotes[sym]
             const up   = q && q.change > 0
@@ -315,7 +316,7 @@ export default function Watchlist() {
             const sign = q && q.change >= 0 ? '+' : ''
 
             const priceColor = up ? 'text-green-400' : dn ? 'text-red-400' : 'text-slate-400'
-            const badgeBg    = up ? 'bg-green-500/10 border-green-900/40' : dn ? 'bg-red-500/10 border-red-900/40' : 'bg-slate-800 border-slate-700'
+            const badgeBg    = up ? 'bg-green-500/10 border-green-900/40 text-green-400' : dn ? 'bg-red-500/10 border-red-900/40 text-red-400' : 'bg-slate-800 border-slate-700 text-slate-400'
             const isOver     = dragOverIdx === idx
             const isDragging = dragIdx.current === idx
 
@@ -327,7 +328,7 @@ export default function Watchlist() {
                 onDragOver={e => onDragOver(e, idx)}
                 onDrop={() => onDrop(idx)}
                 onDragEnd={reset}
-                className={`grid grid-cols-[20px_1fr_auto] items-center px-4 py-3
+                className={`flex items-center gap-2 px-3 py-2.5
                             transition-colors group border-b border-slate-800/50 last:border-0
                             ${isDragging ? 'opacity-40' : 'opacity-100'}
                             ${isOver
@@ -338,7 +339,7 @@ export default function Watchlist() {
                 {/* Drag handle */}
                 <div
                   className="flex flex-col gap-[3px] items-center justify-center cursor-grab active:cursor-grabbing
-                             text-slate-600 hover:text-slate-400 transition-colors py-1 pr-1 select-none"
+                             text-slate-600 hover:text-slate-400 transition-colors shrink-0 select-none px-0.5"
                   title="Drag to reorder"
                 >
                   <span className="w-2.5 h-0.5 bg-current rounded-full" />
@@ -346,64 +347,46 @@ export default function Watchlist() {
                   <span className="w-2.5 h-0.5 bg-current rounded-full" />
                 </div>
 
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-sm font-bold text-slate-100">{sym}</span>
-                    {q?.assetType && (
-                      <span className="text-xs text-slate-600 hidden sm:block">{q.assetType}</span>
-                    )}
-                  </div>
-                  <div className="text-xs text-slate-600 truncate mt-0.5">
+                {/* Symbol + name */}
+                <div className="flex-1 min-w-0">
+                  <div className="font-mono text-sm font-bold text-slate-100 leading-tight">{sym}</div>
+                  <div className="text-xs text-slate-600 truncate leading-tight">
                     {q?.name ?? <span className="animate-pulse">Loading…</span>}
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4 shrink-0">
+                {/* Change badge */}
+                <div className="shrink-0">
                   {q ? (
-                    <div className="hidden md:flex flex-col items-end w-24">
-                      <div className="flex items-center gap-1 w-full">
-                        <span className="text-xs text-slate-700 font-mono">{fmt(q.low)}</span>
-                        <div className="flex-1 h-1 bg-slate-700 rounded-full overflow-hidden mx-1">
-                          <div
-                            className={`h-full rounded-full ${up ? 'bg-green-500' : dn ? 'bg-red-500' : 'bg-slate-500'}`}
-                            style={{ width: `${Math.min(100, Math.max(0, ((q.price - q.low) / (q.high - q.low || 1)) * 100))}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-slate-700 font-mono">{fmt(q.high)}</span>
-                      </div>
-                    </div>
-                  ) : <div className="hidden md:block w-24" />}
-
-                  <div className="w-20 text-right">
-                    {q ? (
-                      <span className={`inline-block text-xs font-mono font-semibold px-2 py-0.5 rounded border ${badgeBg} ${priceColor}`}>
-                        {sign}{fmt(q.changePercent)}%
-                      </span>
-                    ) : (
-                      <span className="text-slate-700 text-xs animate-pulse">—</span>
-                    )}
-                  </div>
-
-                  <div className="w-24 text-right">
-                    {q ? (
-                      <>
-                        <div className={`font-mono font-bold text-base ${priceColor}`}>{fmt(q.price)}</div>
-                        <div className={`font-mono text-xs ${priceColor} opacity-70`}>{sign}{fmt(q.change)}</div>
-                      </>
-                    ) : (
-                      <div className="font-mono text-slate-700 animate-pulse text-base">…</div>
-                    )}
-                  </div>
-
-                  <button
-                    onClick={() => removeSymbol(sym)}
-                    title={`Remove ${sym}`}
-                    className="w-5 text-slate-700 hover:text-red-400 opacity-0 group-hover:opacity-100
-                               transition-all text-sm leading-none shrink-0"
-                  >
-                    ✕
-                  </button>
+                    <span className={`inline-block text-xs font-mono font-semibold px-1.5 py-0.5 rounded border ${badgeBg}`}>
+                      {sign}{fmt(q.changePercent)}%
+                    </span>
+                  ) : (
+                    <span className="text-slate-700 text-xs animate-pulse w-12 inline-block text-center">—</span>
+                  )}
                 </div>
+
+                {/* Price */}
+                <div className="shrink-0 text-right w-16">
+                  {q ? (
+                    <>
+                      <div className={`font-mono font-bold text-sm leading-tight ${priceColor}`}>{fmt(q.price)}</div>
+                      <div className={`font-mono text-xs leading-tight ${priceColor} opacity-60`}>{sign}{fmt(q.change)}</div>
+                    </>
+                  ) : (
+                    <div className="font-mono text-slate-700 animate-pulse text-sm">…</div>
+                  )}
+                </div>
+
+                {/* Remove */}
+                <button
+                  onClick={() => removeSymbol(sym)}
+                  title={`Remove ${sym}`}
+                  className="shrink-0 w-4 text-slate-700 hover:text-red-400 opacity-0 group-hover:opacity-100
+                             transition-all text-xs leading-none"
+                >
+                  ✕
+                </button>
               </div>
             )
           })}

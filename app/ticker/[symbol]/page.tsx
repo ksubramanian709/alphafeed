@@ -6,6 +6,7 @@ import NewsFeed from '../../components/NewsFeed'
 import OptionsChain from '../../components/OptionsChain'
 import EarningsDropdown from '../../components/EarningsDropdown'
 import FundamentalsPanel from '../../components/FundamentalsPanel'
+import AIInsights from '../../components/AIInsights'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -215,6 +216,11 @@ export default function TickerPage() {
             </h2>
             <PriceChart symbol={quote.symbol} />
           </div>
+
+          {/* ── AI Insights — equities and ETFs only ── */}
+          {(quote.assetType === 'EQUITY' || quote.assetType === 'ETF') && (
+            <AIInsights symbol={quote.symbol} />
+          )}
 
           {/* ── Fundamentals / Earnings / Options — equities only ── */}
           {(quote.assetType === 'EQUITY' || quote.assetType === 'ETF') && (

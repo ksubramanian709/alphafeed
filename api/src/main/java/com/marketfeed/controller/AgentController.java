@@ -63,6 +63,23 @@ public class AgentController {
 
     // ── Endpoints ────────────────────────────────────────────────────────────────
 
+    @GetMapping("/insights/{symbol}")
+    @Operation(summary = "AI bull/bear analysis for a ticker")
+    public ResponseEntity<com.marketfeed.model.StockInsight> insights(
+            @PathVariable String symbol, HttpServletRequest httpReq) {
+        String ip = clientIp(httpReq);
+        if (isRateLimited(ip)) {
+            return ResponseEntity.status(429).body(
+                com.marketfeed.model.StockInsight.builder()
+                    .symbol(symbol.toUpperCase())
+                    .error("Rate limit reached — try again later.")
+                    .build());
+        }
+        com.marketfeed.model.StockInsight result = agentService.getInsights(symbol);
+        if (result.getError() != null) return ResponseEntity.status(503).body(result);
+        return ResponseEntity.ok(result);
+    }
+
     @GetMapping("/suggestions")
     @Operation(summary = "Get AI-generated daily question suggestions")
     public ResponseEntity<List<String>> getSuggestions() {

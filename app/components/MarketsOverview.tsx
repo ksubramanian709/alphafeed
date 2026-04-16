@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -64,9 +65,11 @@ export default function MarketsOverview() {
           const bgColor   = up ? 'bg-green-950/20' : dn ? 'bg-red-950/20' : 'bg-slate-900'
 
           return (
-            <div
+            <Link
               key={item.symbol}
-              className={`shrink-0 rounded-lg border px-3 py-2.5 min-w-[120px] ${bgColor} ${borderColor}`}
+              href={`/ticker/${encodeURIComponent(item.symbol)}`}
+              className={`shrink-0 rounded-lg border px-3 py-2.5 min-w-[120px] ${bgColor} ${borderColor}
+                          hover:brightness-125 hover:border-slate-600 transition-all cursor-pointer`}
             >
               <div className="text-xs text-slate-500 font-medium mb-1 whitespace-nowrap">{item.label}</div>
               <div className={`font-mono font-bold text-sm ${color}`}>
@@ -75,7 +78,7 @@ export default function MarketsOverview() {
               <div className={`font-mono text-xs mt-0.5 ${color}`}>
                 {sign}{item.changePercent.toFixed(2)}%
               </div>
-            </div>
+            </Link>
           )
         })}
       </div>

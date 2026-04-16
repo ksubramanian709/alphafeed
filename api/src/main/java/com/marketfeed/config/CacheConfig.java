@@ -65,6 +65,10 @@ public class CacheConfig {
         manager.registerCustomCache("screener-universe",
                 Caffeine.newBuilder().expireAfterWrite(1, TimeUnit.HOURS).maximumSize(1).build());
 
+        // AI stock insights — cached 4 hours per symbol to limit Claude API calls
+        manager.registerCustomCache("insights",
+                Caffeine.newBuilder().expireAfterWrite(4, TimeUnit.HOURS).maximumSize(200).build());
+
         return manager;
     }
 }
