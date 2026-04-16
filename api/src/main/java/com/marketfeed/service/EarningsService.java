@@ -373,9 +373,9 @@ public class EarningsService {
     private String normalizeReportTime(String time) {
         if (time == null || time.isBlank() || time.equalsIgnoreCase("Time Not Supplied")) return null;
         String t = time.toLowerCase();
-        if (t.contains("before") || t.contains("bmo")) return "Pre-Market";
-        if (t.contains("after")  || t.contains("amc")) return "After-Hours";
-        return time;
+        if (t.contains("before") || t.contains("bmo") || t.contains("pre")) return "Pre-Market";
+        if (t.contains("after")  || t.contains("amc") || t.contains("post")) return "After-Hours";
+        return null; // treat unknown as no time
     }
 
     private Long parseMarketCap(String s) {
