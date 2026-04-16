@@ -26,15 +26,85 @@ public class CommoditiesController {
 
     private final QuoteService quoteService;
 
-    // Full commodity universe across six verticals
-    private static final Map<String, List<String>> FUTURES = new LinkedHashMap<>(Map.of(
-        "energy",    List.of("CL=F", "BZ=F", "NG=F", "RB=F", "HO=F"),          // Crude, Brent, NatGas, Gasoline, Heating Oil
-        "metals",    List.of("GC=F", "SI=F", "HG=F", "PL=F", "PA=F"),          // Gold, Silver, Copper, Platinum, Palladium
-        "grains",    List.of("ZC=F", "ZW=F", "ZS=F", "ZO=F", "ZR=F"),          // Corn, Wheat, Soybeans, Oats, Rice
-        "softs",     List.of("KC=F", "SB=F", "CC=F", "CT=F", "OJ=F"),          // Coffee, Sugar, Cocoa, Cotton, OJ
-        "livestock", List.of("LE=F", "HE=F", "GF=F"),                           // Live Cattle, Lean Hogs, Feeder Cattle
-        "financials",List.of("ES=F", "NQ=F", "YM=F", "RTY=F", "ZN=F", "ZB=F") // E-mini S&P/Nasdaq/Dow/Russell, 10Y/30Y
-    ));
+    // Full futures universe — every actively traded Yahoo Finance futures symbol
+    private static final Map<String, List<String>> FUTURES;
+    static {
+        FUTURES = new LinkedHashMap<>();
+        // Energy
+        FUTURES.put("energy", List.of(
+            "CL=F",  // WTI Crude Oil
+            "BZ=F",  // Brent Crude
+            "NG=F",  // Natural Gas
+            "RB=F",  // RBOB Gasoline
+            "HO=F",  // Heating Oil
+            "QO=F"   // E-mini Crude Oil
+        ));
+        // Metals
+        FUTURES.put("metals", List.of(
+            "GC=F",  // Gold
+            "SI=F",  // Silver
+            "HG=F",  // Copper
+            "PL=F",  // Platinum
+            "PA=F",  // Palladium
+            "ALI=F"  // Aluminum
+        ));
+        // Grains
+        FUTURES.put("grains", List.of(
+            "ZC=F",  // Corn
+            "ZW=F",  // Chicago Wheat
+            "KE=F",  // KC Hard Red Wheat
+            "ZS=F",  // Soybeans
+            "ZL=F",  // Soybean Oil
+            "ZM=F",  // Soybean Meal
+            "ZO=F",  // Oats
+            "ZR=F"   // Rough Rice
+        ));
+        // Softs
+        FUTURES.put("softs", List.of(
+            "KC=F",  // Coffee
+            "SB=F",  // Sugar #11
+            "CC=F",  // Cocoa
+            "CT=F",  // Cotton #2
+            "OJ=F",  // Orange Juice
+            "LBS=F"  // Lumber
+        ));
+        // Livestock
+        FUTURES.put("livestock", List.of(
+            "LE=F",  // Live Cattle
+            "HE=F",  // Lean Hogs
+            "GF=F"   // Feeder Cattle
+        ));
+        // Equity index futures
+        FUTURES.put("index_futures", List.of(
+            "ES=F",  // E-mini S&P 500
+            "NQ=F",  // E-mini Nasdaq 100
+            "YM=F",  // E-mini Dow Jones
+            "RTY=F", // E-mini Russell 2000
+            "EMD=F", // E-mini S&P MidCap 400
+            "NKD=F"  // Nikkei 225 Dollar
+        ));
+        // Interest rates
+        FUTURES.put("rates", List.of(
+            "ZB=F",  // 30Y T-Bond
+            "ZN=F",  // 10Y T-Note
+            "ZF=F",  // 5Y T-Note
+            "ZT=F",  // 2Y T-Note
+            "ZQ=F",  // 30-Day Fed Funds
+            "GE=F"   // Eurodollar
+        ));
+        // Currencies
+        FUTURES.put("currencies", List.of(
+            "6E=F",  // Euro
+            "6J=F",  // Japanese Yen
+            "6B=F",  // British Pound
+            "6C=F",  // Canadian Dollar
+            "6A=F",  // Australian Dollar
+            "6S=F",  // Swiss Franc
+            "6N=F",  // New Zealand Dollar
+            "6M=F",  // Mexican Peso
+            "DX=F"   // US Dollar Index
+        ));
+    }
 
     @GetMapping("/futures")
     @Operation(summary = "Snapshot of all key commodity futures",

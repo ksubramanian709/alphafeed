@@ -5,12 +5,15 @@ import Link from 'next/link'
 const API = process.env.NEXT_PUBLIC_API_URL
 
 const SECTOR_META: Record<string, { label: string; icon: string; accent: string; glow: string }> = {
-  energy:     { label: 'Energy',      icon: '⚡', accent: 'text-orange-400', glow: 'hover:border-orange-500/40 hover:bg-orange-950/10'  },
-  metals:     { label: 'Metals',      icon: '✦',  accent: 'text-yellow-400', glow: 'hover:border-yellow-500/40 hover:bg-yellow-950/10'  },
-  grains:     { label: 'Grains',      icon: '🌾', accent: 'text-lime-400',   glow: 'hover:border-lime-500/40 hover:bg-lime-950/10'      },
-  softs:      { label: 'Softs',       icon: '☕', accent: 'text-amber-400',  glow: 'hover:border-amber-500/40 hover:bg-amber-950/10'    },
-  livestock:  { label: 'Livestock',   icon: '🐄', accent: 'text-rose-400',   glow: 'hover:border-rose-500/40 hover:bg-rose-950/10'      },
-  financials: { label: 'Financials',  icon: '📊', accent: 'text-sky-400',    glow: 'hover:border-sky-500/40 hover:bg-sky-950/10'        },
+  energy:        { label: 'Energy',          icon: '⚡', accent: 'text-orange-400', glow: 'hover:border-orange-500/40 hover:bg-orange-950/10'  },
+  metals:        { label: 'Metals',          icon: '✦',  accent: 'text-yellow-400', glow: 'hover:border-yellow-500/40 hover:bg-yellow-950/10'  },
+  grains:        { label: 'Grains',          icon: '🌾', accent: 'text-lime-400',   glow: 'hover:border-lime-500/40 hover:bg-lime-950/10'      },
+  softs:         { label: 'Softs',           icon: '☕', accent: 'text-amber-400',  glow: 'hover:border-amber-500/40 hover:bg-amber-950/10'    },
+  livestock:     { label: 'Livestock',       icon: '🐄', accent: 'text-rose-400',   glow: 'hover:border-rose-500/40 hover:bg-rose-950/10'      },
+  index_futures: { label: 'Index Futures',   icon: '📈', accent: 'text-blue-400',   glow: 'hover:border-blue-500/40 hover:bg-blue-950/10'      },
+  rates:         { label: 'Interest Rates',  icon: '🏦', accent: 'text-violet-400', glow: 'hover:border-violet-500/40 hover:bg-violet-950/10'  },
+  currencies:    { label: 'Currencies / FX', icon: '💱', accent: 'text-teal-400',   glow: 'hover:border-teal-500/40 hover:bg-teal-950/10'      },
+  financials:    { label: 'Financials',      icon: '📊', accent: 'text-sky-400',    glow: 'hover:border-sky-500/40 hover:bg-sky-950/10'        },
 }
 
 const SYMBOL_META: Record<string, { name: string; unit: string }> = {
@@ -42,13 +45,39 @@ const SYMBOL_META: Record<string, { name: string; unit: string }> = {
   'LE=F':  { name: 'Live Cattle',  unit: '/lb'    },
   'HE=F':  { name: 'Lean Hogs',    unit: '/lb'    },
   'GF=F':  { name: 'Feeder Cattle',unit: '/lb'    },
-  // Financials
-  'ES=F':  { name: 'E-mini S&P',   unit: 'pts'    },
-  'NQ=F':  { name: 'E-mini Nasdaq',unit: 'pts'    },
-  'YM=F':  { name: 'E-mini Dow',   unit: 'pts'    },
-  'RTY=F': { name: 'E-mini Russell',unit: 'pts'   },
-  'ZN=F':  { name: '10Y T-Note',   unit: ''       },
-  'ZB=F':  { name: '30Y T-Bond',   unit: ''       },
+  // Index futures
+  'ES=F':  { name: 'E-mini S&P 500',   unit: 'pts' },
+  'NQ=F':  { name: 'E-mini Nasdaq',    unit: 'pts' },
+  'YM=F':  { name: 'E-mini Dow',       unit: 'pts' },
+  'RTY=F': { name: 'E-mini Russell',   unit: 'pts' },
+  'EMD=F': { name: 'E-mini S&P 400',   unit: 'pts' },
+  'NKD=F': { name: 'Nikkei 225',       unit: 'pts' },
+  // Rates
+  'ZB=F':  { name: '30Y T-Bond',       unit: ''    },
+  'ZN=F':  { name: '10Y T-Note',       unit: ''    },
+  'ZF=F':  { name: '5Y T-Note',        unit: ''    },
+  'ZT=F':  { name: '2Y T-Note',        unit: ''    },
+  'ZQ=F':  { name: 'Fed Funds',        unit: ''    },
+  'GE=F':  { name: 'Eurodollar',       unit: ''    },
+  // Currencies
+  '6E=F':  { name: 'Euro',             unit: 'USD' },
+  '6J=F':  { name: 'Japanese Yen',     unit: 'USD' },
+  '6B=F':  { name: 'British Pound',    unit: 'USD' },
+  '6C=F':  { name: 'Canadian Dollar',  unit: 'USD' },
+  '6A=F':  { name: 'Australian Dollar',unit: 'USD' },
+  '6S=F':  { name: 'Swiss Franc',      unit: 'USD' },
+  '6N=F':  { name: 'NZ Dollar',        unit: 'USD' },
+  '6M=F':  { name: 'Mexican Peso',     unit: 'USD' },
+  'DX=F':  { name: 'USD Index',        unit: ''    },
+  // Grains extras
+  'ZL=F':  { name: 'Soybean Oil',      unit: '/lb' },
+  'ZM=F':  { name: 'Soybean Meal',     unit: '/t'  },
+  'KE=F':  { name: 'KC HRW Wheat',     unit: '/bu' },
+  // Metals extras
+  'ALI=F': { name: 'Aluminum',         unit: '/lb' },
+  'QO=F':  { name: 'E-mini Crude',     unit: '/bbl'},
+  // Softs extras
+  'LBS=F': { name: 'Lumber',           unit: '/mbf'},
 }
 
 interface Quote {
