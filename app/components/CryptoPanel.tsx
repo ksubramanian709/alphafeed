@@ -5,14 +5,14 @@ import Link from 'next/link'
 const API = process.env.NEXT_PUBLIC_API_URL
 
 const CRYPTOS = [
-  { symbol: 'BTC-USD', name: 'Bitcoin',   abbr: 'BTC', color: 'text-orange-400',  bg: 'bg-orange-500/10',  border: 'border-orange-500/20',  glow: 'hover:border-orange-400/50 hover:shadow-orange-900/40' },
-  { symbol: 'ETH-USD', name: 'Ethereum',  abbr: 'ETH', color: 'text-violet-400',  bg: 'bg-violet-500/10',  border: 'border-violet-500/20',  glow: 'hover:border-violet-400/50 hover:shadow-violet-900/40' },
-  { symbol: 'SOL-USD', name: 'Solana',    abbr: 'SOL', color: 'text-purple-400',  bg: 'bg-purple-500/10',  border: 'border-purple-500/20',  glow: 'hover:border-purple-400/50 hover:shadow-purple-900/40' },
-  { symbol: 'BNB-USD', name: 'BNB',       abbr: 'BNB', color: 'text-yellow-400',  bg: 'bg-yellow-500/10',  border: 'border-yellow-500/20',  glow: 'hover:border-yellow-400/50 hover:shadow-yellow-900/40' },
-  { symbol: 'XRP-USD', name: 'XRP',       abbr: 'XRP', color: 'text-sky-400',     bg: 'bg-sky-500/10',     border: 'border-sky-500/20',     glow: 'hover:border-sky-400/50 hover:shadow-sky-900/40'       },
-  { symbol: 'DOGE-USD',name: 'Dogecoin',  abbr: 'DOGE',color: 'text-amber-400',   bg: 'bg-amber-500/10',   border: 'border-amber-500/20',   glow: 'hover:border-amber-400/50 hover:shadow-amber-900/40'   },
-  { symbol: 'ADA-USD', name: 'Cardano',   abbr: 'ADA', color: 'text-blue-400',    bg: 'bg-blue-500/10',    border: 'border-blue-500/20',    glow: 'hover:border-blue-400/50 hover:shadow-blue-900/40'     },
-  { symbol: 'AVAX-USD',name: 'Avalanche', abbr: 'AVAX',color: 'text-red-400',     bg: 'bg-red-500/10',     border: 'border-red-500/20',     glow: 'hover:border-red-400/50 hover:shadow-red-900/40'       },
+  { symbol: 'BTC-USD',  name: 'Bitcoin',   abbr: 'BTC',  color: 'text-orange-400', bg: 'bg-orange-500/10',  border: 'border-orange-500/20',  glow: 'hover:border-orange-400/50 hover:shadow-orange-900/40'  },
+  { symbol: 'ETH-USD',  name: 'Ethereum',  abbr: 'ETH',  color: 'text-violet-400', bg: 'bg-violet-500/10',  border: 'border-violet-500/20',  glow: 'hover:border-violet-400/50 hover:shadow-violet-900/40'  },
+  { symbol: 'SOL-USD',  name: 'Solana',    abbr: 'SOL',  color: 'text-purple-400', bg: 'bg-purple-500/10',  border: 'border-purple-500/20',  glow: 'hover:border-purple-400/50 hover:shadow-purple-900/40'  },
+  { symbol: 'BNB-USD',  name: 'BNB',       abbr: 'BNB',  color: 'text-yellow-400', bg: 'bg-yellow-500/10',  border: 'border-yellow-500/20',  glow: 'hover:border-yellow-400/50 hover:shadow-yellow-900/40'  },
+  { symbol: 'XRP-USD',  name: 'XRP',       abbr: 'XRP',  color: 'text-sky-400',    bg: 'bg-sky-500/10',     border: 'border-sky-500/20',     glow: 'hover:border-sky-400/50 hover:shadow-sky-900/40'        },
+  { symbol: 'DOGE-USD', name: 'Dogecoin',  abbr: 'DOGE', color: 'text-amber-400',  bg: 'bg-amber-500/10',   border: 'border-amber-500/20',   glow: 'hover:border-amber-400/50 hover:shadow-amber-900/40'    },
+  { symbol: 'ADA-USD',  name: 'Cardano',   abbr: 'ADA',  color: 'text-blue-400',   bg: 'bg-blue-500/10',    border: 'border-blue-500/20',    glow: 'hover:border-blue-400/50 hover:shadow-blue-900/40'      },
+  { symbol: 'AVAX-USD', name: 'Avalanche', abbr: 'AVAX', color: 'text-red-400',    bg: 'bg-red-500/10',     border: 'border-red-500/20',     glow: 'hover:border-red-400/50 hover:shadow-red-900/40'        },
 ]
 
 interface Quote {
@@ -42,6 +42,7 @@ export default function CryptoPanel() {
   const [quotes, setQuotes]         = useState<Record<string, Quote>>({})
   const [loading, setLoading]       = useState(true)
   const [lastUpdate, setLastUpdate] = useState('')
+  const [filter, setFilter]         = useState('')
 
   async function load() {
     try {
@@ -70,27 +71,53 @@ export default function CryptoPanel() {
     return () => clearInterval(id)
   }, [])
 
+  const filtered = CRYPTOS.filter(c => {
+    if (!filter) return true
+    const f = filter.toLowerCase()
+    return c.abbr.toLowerCase().includes(f) || c.name.toLowerCase().includes(f)
+  })
+
   return (
-    <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden">
+    <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden flex flex-col">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {/* Bitcoin-style icon */}
+      <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 shrink-0">
           <svg className="w-4 h-4 text-orange-400" viewBox="0 0 24 24" fill="currentColor">
             <path d="M23.638 14.904c-1.602 6.43-8.113 10.34-14.542 8.736C2.67 22.05-1.244 15.525.362 9.105 1.962 2.67 8.475-1.243 14.9.358c6.43 1.605 10.342 8.115 8.738 14.546z"/>
-            <path fill="#1a1a2e" d="M17.44 10.71c.24-1.62-.99-2.49-2.68-3.07l.55-2.19-1.33-.33-.53 2.13c-.35-.09-.71-.17-1.07-.25l.54-2.16-1.33-.33-.55 2.19c-.29-.07-.57-.13-.85-.2l.001-.005-1.84-.46-.35 1.42s.99.23.97.24c.54.13.64.49.62.77l-1.49 5.97c-.07.17-.23.43-.62.33.01.02-.97-.24-.97-.24l-.67 1.52 1.73.43c.32.08.64.17.95.25l-.56 2.23 1.33.33.55-2.19c.37.1.72.19 1.07.28l-.54 2.17 1.33.33.56-2.22c2.31.44 4.04.26 4.77-1.83.59-1.68-.03-2.65-1.24-3.28.88-.2 1.54-.78 1.72-1.97zm-3.08 4.32c-.42 1.68-3.26.77-4.18.54l.75-2.99c.92.23 3.87.69 3.43 2.45zm.42-4.35c-.38 1.53-2.74.75-3.51.56l.68-2.71c.77.19 3.24.55 2.83 2.15z"/>
+            <path fill="#0f172a" d="M17.44 10.71c.24-1.62-.99-2.49-2.68-3.07l.55-2.19-1.33-.33-.53 2.13c-.35-.09-.71-.17-1.07-.25l.54-2.16-1.33-.33-.55 2.19c-.29-.07-.57-.13-.85-.2l.001-.005-1.84-.46-.35 1.42s.99.23.97.24c.54.13.64.49.62.77l-1.49 5.97c-.07.17-.23.43-.62.33.01.02-.97-.24-.97-.24l-.67 1.52 1.73.43c.32.08.64.17.95.25l-.56 2.23 1.33.33.55-2.19c.37.1.72.19 1.07.28l-.54 2.17 1.33.33.56-2.22c2.31.44 4.04.26 4.77-1.83.59-1.68-.03-2.65-1.24-3.28.88-.2 1.54-.78 1.72-1.97zm-3.08 4.32c-.42 1.68-3.26.77-4.18.54l.75-2.99c.92.23 3.87.69 3.43 2.45zm.42-4.35c-.38 1.53-2.74.75-3.51.56l.68-2.71c.77.19 3.24.55 2.83 2.15z"/>
           </svg>
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-            Crypto
-          </h2>
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Crypto</h2>
           <span className="text-[10px] text-slate-700 border border-slate-800 px-1.5 py-0.5 rounded-full">24h</span>
         </div>
+
+        {/* Search */}
+        <div className="relative flex-1 max-w-[180px]">
+          <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+          </svg>
+          <input
+            value={filter}
+            onChange={e => setFilter(e.target.value)}
+            placeholder="BTC, Solana…"
+            className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-7 pr-3 py-1.5 text-xs
+                       placeholder-slate-600 text-slate-300 focus:outline-none focus:border-slate-500 transition-colors"
+          />
+          {filter && (
+            <button
+              onClick={() => setFilter('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-400"
+            >
+              ×
+            </button>
+          )}
+        </div>
+
         {lastUpdate && (
-          <span className="text-[10px] text-slate-700">updated {lastUpdate}</span>
+          <span className="text-[10px] text-slate-700 shrink-0 hidden sm:block">updated {lastUpdate}</span>
         )}
       </div>
 
-      <div className="p-4">
+      <div className="p-4 flex-1">
         {loading && (
           <div className="grid grid-cols-2 gap-2">
             {Array.from({ length: 8 }).map((_, i) => (
@@ -99,9 +126,15 @@ export default function CryptoPanel() {
           </div>
         )}
 
-        {!loading && (
+        {!loading && filtered.length === 0 && (
+          <div className="text-center py-8 text-slate-600 text-sm">
+            No results for &ldquo;{filter}&rdquo;
+          </div>
+        )}
+
+        {!loading && filtered.length > 0 && (
           <div className="grid grid-cols-2 gap-2">
-            {CRYPTOS.map(c => {
+            {filtered.map(c => {
               const q    = quotes[c.symbol]
               const up   = q && q.change > 0
               const dn   = q && q.change < 0
@@ -111,9 +144,9 @@ export default function CryptoPanel() {
                 <Link
                   key={c.symbol}
                   href={`/ticker/${encodeURIComponent(c.symbol)}`}
-                  className={`group relative border rounded-xl p-3 transition-all duration-200 cursor-pointer
+                  className={`group relative border rounded-xl p-3 transition-all duration-200
                               ${c.bg} ${c.border} ${c.glow}
-                              hover:scale-[1.02] hover:shadow-lg`}
+                              hover:scale-[1.02] hover:shadow-lg block`}
                 >
                   <div className="flex items-start justify-between mb-1.5">
                     <div>
@@ -149,7 +182,6 @@ export default function CryptoPanel() {
                     <div className="h-5 bg-slate-800/60 rounded animate-pulse w-20 mt-1" />
                   )}
 
-                  {/* Arrow on hover */}
                   <div className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-60 transition-opacity">
                     <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />

@@ -44,12 +44,6 @@ export default function Home() {
         <MarketsOverview />
       </section>
 
-      {/* ── Commodities + Crypto side by side ───────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <CommodityDashboard />
-        <CryptoPanel />
-      </div>
-
       {/* ── Screener CTA ────────────────────────────────────────────── */}
       <Link href="/screener" className="block group">
         <div className="relative overflow-hidden rounded-2xl border border-slate-700/60 bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/30 p-6 hover:border-emerald-500/40 transition-all duration-300">
@@ -119,6 +113,12 @@ export default function Home() {
           <AgentChat />
         </div>
 
+      </div>
+
+      {/* ── Commodities + Crypto ────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <CommodityDashboard />
+        <CryptoPanel />
       </div>
 
       {/* ── Macro ───────────────────────────────────────────────────── */}
