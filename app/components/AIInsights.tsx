@@ -43,12 +43,13 @@ export default function AIInsights({ symbol }: { symbol: string }) {
     setError(null)
     try {
       const r = await fetch(`${API}/v1/agent/insights/${encodeURIComponent(symbol)}`)
+      if (r.status === 429) { setError('Rate limit reached — try again in an hour.'); return }
+      if (!r.ok)            { setError('Analysis temporarily unavailable.'); return }
       const d: Insight = await r.json()
-      if (r.status === 429) { setError('Rate limit reached — try again later.'); return }
-      if (d.error)           { setError(d.error); return }
+      if (d.error)          { setError('Analysis temporarily unavailable.'); return }
       setInsight(d)
     } catch {
-      setError('Failed to load AI analysis.')
+      setError('Analysis temporarily unavailable.')
     } finally {
       setLoading(false)
     }
