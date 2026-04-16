@@ -62,21 +62,15 @@ export default function MacroIndicators() {
     : null
 
   return (
-    <section>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-          Macro Indicators
-          <span className="text-slate-700 normal-case tracking-normal font-normal ml-1">— FRED</span>
-        </h2>
-        {lastUpdate && (
-          <span className="text-xs text-slate-700">updated {lastUpdate}</span>
-        )}
-      </div>
+    <div>
+      {lastUpdate && (
+        <p className="text-[10px] text-slate-700 mb-3">updated {lastUpdate}</p>
+      )}
 
       {loading && <div className="text-slate-600 text-sm">Loading…</div>}
 
       {error && !data && (
-        <div className="text-slate-600 text-sm bg-slate-900 border border-slate-800 rounded p-3">
+        <div className="text-slate-600 text-sm">
           {error.includes('FRED_API_KEY') ? (
             <span>FRED data unavailable — add a free <span className="font-mono text-slate-500">FRED_API_KEY</span> to enable macro indicators.</span>
           ) : error}
@@ -90,7 +84,7 @@ export default function MacroIndicators() {
             <div className={`flex items-center gap-3 rounded-lg px-3 py-2 text-xs border ${
               spread < 0
                 ? 'bg-red-950/20 border-red-900/30 text-red-400'
-                : 'bg-slate-900 border-slate-800 text-slate-400'
+                : 'bg-slate-800/50 border-slate-700/50 text-slate-400'
             }`}>
               <span className="font-semibold">
                 {spread < 0 ? 'Yield Curve Inverted' : 'Yield Curve Normal'}
@@ -113,13 +107,13 @@ export default function MacroIndicators() {
                 <div
                   key={id}
                   title={ind.name}
-                  className="bg-slate-900 border border-slate-800 rounded-lg px-3 py-2.5"
+                  className="bg-slate-800/50 border border-slate-700/50 rounded-xl px-3 py-3"
                 >
-                  <div className="text-xs text-slate-500 mb-1">{label}</div>
-                  <div className="font-mono font-semibold text-slate-200 text-base">
+                  <div className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">{label}</div>
+                  <div className="font-mono font-bold text-slate-100 text-lg">
                     {format(ind.value)}
                   </div>
-                  <div className="text-xs text-slate-700 mt-0.5">
+                  <div className="text-[10px] text-slate-700 mt-0.5">
                     {ind.date}
                   </div>
                 </div>
@@ -128,6 +122,6 @@ export default function MacroIndicators() {
           </div>
         </div>
       )}
-    </section>
+    </div>
   )
 }

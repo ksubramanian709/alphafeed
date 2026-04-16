@@ -3,6 +3,7 @@ import MarketsOverview from './components/MarketsOverview'
 import QuoteSearch from './components/QuoteSearch'
 import NewsFeed from './components/NewsFeed'
 import CommodityDashboard from './components/CommodityDashboard'
+import CryptoPanel from './components/CryptoPanel'
 import MacroIndicators from './components/MacroIndicators'
 import Watchlist from './components/Watchlist'
 import EarningsCalendar from './components/EarningsCalendar'
@@ -43,6 +44,12 @@ export default function Home() {
         <MarketsOverview />
       </section>
 
+      {/* ── Commodities + Crypto side by side ───────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <CommodityDashboard />
+        <CryptoPanel />
+      </div>
+
       {/* ── Screener CTA ────────────────────────────────────────────── */}
       <Link href="/screener" className="block group">
         <div className="relative overflow-hidden rounded-2xl border border-slate-700/60 bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/30 p-6 hover:border-emerald-500/40 transition-all duration-300">
@@ -71,11 +78,11 @@ export default function Home() {
               {/* Preset pills */}
               <div className="flex flex-wrap gap-2 mt-4">
                 {[
-                  { label: 'Value Stocks',  sub: 'P/E < 20' },
-                  { label: 'High Growth',   sub: 'Rev > 15%' },
-                  { label: 'Dividend',      sub: 'Yield > 2%' },
-                  { label: 'Low Volatility',sub: 'Beta < 0.8' },
-                  { label: 'High ROE',      sub: '> 20%' },
+                  { label: 'Value Stocks',   sub: 'P/E < 20'   },
+                  { label: 'High Growth',    sub: 'Rev > 15%'  },
+                  { label: 'Dividend',       sub: 'Yield > 2%' },
+                  { label: 'Low Volatility', sub: 'Beta < 0.8' },
+                  { label: 'High ROE',       sub: '> 20%'      },
                 ].map(p => (
                   <span key={p.label} className="flex items-center gap-1.5 bg-slate-800/80 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-400 group-hover:border-slate-600 transition-colors">
                     <span className="text-slate-300">{p.label}</span>
@@ -100,13 +107,13 @@ export default function Home() {
       {/* ── Main 2-column grid ──────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* Left column: news + earnings */}
+        {/* Left: news + earnings */}
         <div className="lg:col-span-2 space-y-6">
           <NewsFeed limit={8} title="Market Headlines" />
           <EarningsCalendar />
         </div>
 
-        {/* Right column: watchlist + agent */}
+        {/* Right: watchlist + agent */}
         <div className="space-y-6">
           <Watchlist />
           <AgentChat />
@@ -114,9 +121,17 @@ export default function Home() {
 
       </div>
 
-      {/* ── Full-width data sections ────────────────────────────────── */}
-      <CommodityDashboard />
-      <MacroIndicators />
+      {/* ── Macro ───────────────────────────────────────────────────── */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-800 flex items-center gap-2">
+          <span className="text-base">📊</span>
+          <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Macro Indicators</h2>
+          <span className="text-[10px] text-slate-700 border border-slate-800 px-1.5 py-0.5 rounded-full ml-1">FRED</span>
+        </div>
+        <div className="p-4">
+          <MacroIndicators />
+        </div>
+      </div>
 
       {/* ── Footer ──────────────────────────────────────────────────── */}
       <div className="border-t border-slate-800/60 pt-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-700">
