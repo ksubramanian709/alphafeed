@@ -6,6 +6,8 @@ import com.marketfeed.service.QuoteService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.web.bind.annotation.*;
 
@@ -22,6 +24,10 @@ import java.util.Objects;
 public class MarketsController {
 
     private final QuoteService quoteService;
+
+    @Autowired
+    @Qualifier("taskExecutor")
+    private ExecutorService taskExecutor;
 
     // ── Ordered symbol list ────────────────────────────────────────────────────
     private static final List<String> OVERVIEW_SYMBOLS = List.of(
@@ -152,8 +158,6 @@ public class MarketsController {
                description = "Returns quotes grouped by: global indices, sector ETFs, mega-cap equities, crypto, commodities. Cached 60s.")
     @Cacheable("markets")
     public ApiResponse<List<Map<String, Object>>> getOverview() {
-        ExecutorService exec = Executors.newCachedThreadPool();
-
         List<CompletableFuture<Map<String, Object>>> futures = OVERVIEW_SYMBOLS.stream()
             .map(symbol -> CompletableFuture.supplyAsync(() -> {
                 try {
@@ -172,7 +176,7 @@ public class MarketsController {
                 } catch (Exception e) {
                     return null;
                 }
-            }, exec))
+            }, taskExecutor))
             .toList();
 
         // Preserve ordering — collect in OVERVIEW_SYMBOLS order, skip nulls
@@ -183,8 +187,6 @@ public class MarketsController {
             })
             .filter(Objects::nonNull)
             .collect(Collectors.toList());
-
-        exec.shutdown();
 
         return ApiResponse.<List<Map<String, Object>>>builder()
                 .data(results)

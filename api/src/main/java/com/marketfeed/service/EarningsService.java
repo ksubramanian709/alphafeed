@@ -7,7 +7,9 @@ import com.marketfeed.model.*;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -30,6 +32,10 @@ public class EarningsService {
     private final QuoteService quoteService;
     private final OptionsService optionsService;
     private final ObjectMapper mapper = new ObjectMapper();
+
+    @Autowired
+    @Qualifier("taskExecutor")
+    private ExecutorService taskExecutor;
 
     @Value("${market-feed.alpha-vantage.api-key:demo}")
     private String apiKey;
@@ -280,9 +286,8 @@ public class EarningsService {
         log.info("Building setups for {} upcoming earnings", upcoming.size());
 
         // Parallel fetch: quote + options only (history is lazy-loaded per card)
-        ExecutorService exec = Executors.newCachedThreadPool();
         List<CompletableFuture<EarningsSetup>> futures = upcoming.stream()
-            .map(item -> CompletableFuture.supplyAsync(() -> buildSetupFast(item), exec))
+            .map(item -> CompletableFuture.supplyAsync(() -> buildSetupFast(item), taskExecutor))
             .toList();
 
         List<EarningsSetup> setups = futures.stream()
@@ -291,8 +296,6 @@ public class EarningsService {
             .sorted(Comparator.comparing(EarningsSetup::getReportDate)
                 .thenComparingLong(s -> -(s.getMarketCap())))
             .collect(Collectors.toList());
-
-        exec.shutdown();
         log.info("Weekly setups built: {} of {}", setups.size(), upcoming.size());
         return setups;
     }

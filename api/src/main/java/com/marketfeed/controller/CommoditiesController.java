@@ -6,6 +6,8 @@ import com.marketfeed.service.QuoteService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,6 +25,10 @@ import java.util.stream.Collectors;
 public class CommoditiesController {
 
     private final QuoteService quoteService;
+
+    @Autowired
+    @Qualifier("taskExecutor")
+    private ExecutorService taskExecutor;
 
     // Full CME Group + ICE futures — verified Yahoo Finance symbols
     private static final Map<String, List<String>> FUTURES;
@@ -119,8 +125,6 @@ public class CommoditiesController {
                description = "Energy, metals, grains, softs, livestock, index futures, rates, FX. Cached 2 min.")
     @Cacheable("commodities")
     public ApiResponse<Map<String, List<Quote>>> getFuturesSnapshot() {
-        ExecutorService exec = Executors.newCachedThreadPool();
-
         // Kick off all fetches in parallel across all sectors
         Map<String, List<CompletableFuture<Quote>>> sectorFutures = new LinkedHashMap<>();
         FUTURES.forEach((sector, symbols) -> {
@@ -132,7 +136,7 @@ public class CommoditiesController {
                     } catch (Exception e) {
                         return null;
                     }
-                }, exec))
+                }, taskExecutor))
                 .collect(Collectors.toList());
             sectorFutures.put(sector, futs);
         });
@@ -149,8 +153,6 @@ public class CommoditiesController {
                 .collect(Collectors.toList());
             if (!quotes.isEmpty()) snapshot.put(sector, quotes);
         });
-
-        exec.shutdown();
 
         return ApiResponse.<Map<String, List<Quote>>>builder()
                 .data(snapshot)

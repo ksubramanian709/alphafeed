@@ -3,10 +3,19 @@ package com.marketfeed.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.apache.hc.client5.http.config.RequestConfig;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
+import org.apache.hc.core5.util.Timeout;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Configuration
 public class AppConfig {
@@ -18,11 +27,31 @@ public class AppConfig {
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     }
 
+    /**
+     * Shared bounded thread pool for parallel market data fetches.
+     * Fixed at 20 threads — enough for any concurrent batch without unbounded growth.
+     */
+    @Bean(name = "taskExecutor", destroyMethod = "shutdown")
+    public ExecutorService taskExecutor() {
+        return Executors.newFixedThreadPool(20);
+    }
+
     @Bean
     public RestTemplate restTemplate() {
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(10000);
-        factory.setReadTimeout(90000);  // 90s — agent loop may make several Claude calls
-        return new RestTemplate(factory);
+        PoolingHttpClientConnectionManager connManager = new PoolingHttpClientConnectionManager();
+        connManager.setMaxTotal(100);
+        connManager.setDefaultMaxPerRoute(20);
+
+        RequestConfig requestConfig = RequestConfig.custom()
+                .setConnectTimeout(Timeout.ofSeconds(8))
+                .setResponseTimeout(Timeout.ofSeconds(15))
+                .build();
+
+        CloseableHttpClient httpClient = HttpClients.custom()
+                .setConnectionManager(connManager)
+                .setDefaultRequestConfig(requestConfig)
+                .build();
+
+        return new RestTemplate(new HttpComponentsClientHttpRequestFactory(httpClient));
     }
 }
