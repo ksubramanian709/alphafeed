@@ -124,9 +124,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* ── Market Pulse ──────────────────────────────────────────────────────── */}
-      <MarketPulse />
-
       {/* ── Why AlphaFeed ─────────────────────────────────────────────────────── */}
       <div>
         {/* Section header */}
@@ -183,6 +180,9 @@ export default function Home() {
           ))}
         </div>
       </div>
+
+      {/* ── Market Pulse ──────────────────────────────────────────────────────── */}
+      <MarketPulse />
 
       {/* ── Tabbed content ────────────────────────────────────────────────────── */}
       <HomeTabs />
