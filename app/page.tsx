@@ -115,12 +115,12 @@ export default function Home() {
         {/* Market coverage tags — each links to the relevant page/tab */}
         <div className="flex items-center justify-center gap-2 mt-5 flex-wrap">
           {[
-            { label: 'NYSE',        href: '/screener'       },
-            { label: 'NASDAQ',      href: '/screener'       },
-            { label: 'Crypto',      href: '/?tab=markets'   },
-            { label: 'Commodities', href: '/?tab=markets'   },
-            { label: 'Forex',       href: '/?tab=markets'   },
-            { label: 'Macro',       href: '/?tab=markets'   },
+            { label: 'NYSE',        href: '/markets'     },
+            { label: 'NASDAQ',      href: '/markets'     },
+            { label: 'Crypto',      href: '/crypto'      },
+            { label: 'Commodities', href: '/commodities' },
+            { label: 'Forex',       href: '/forex'       },
+            { label: 'Macro',       href: '/macro'       },
           ].map(({ label, href }) => (
             <Link key={label} href={href}
               className="text-[10px] uppercase tracking-widest text-slate-600
