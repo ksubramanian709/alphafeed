@@ -766,6 +766,37 @@ public class EarningsService {
     @Data @JsonIgnoreProperties(ignoreUnknown = true)
     static class YahooEarningsResult {
         private YahooEarningsModule earnings;
+        @JsonProperty("incomeStatementHistoryQuarterly")
+        private YahooIncomeStmtHistoryWrapper incomeStatementHistoryQuarterly;
+        @JsonProperty("earningsTrend")
+        private YahooEarningsTrendWrapper earningsTrend;
+    }
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    static class YahooIncomeStmtHistoryWrapper {
+        private List<YahooIncomeStmtEntry> incomeStatementHistory;
+    }
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    static class YahooIncomeStmtEntry {
+        private YahooRawValue endDate;
+        private YahooRawValue totalRevenue;
+    }
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    static class YahooEarningsTrendWrapper {
+        private List<YahooTrendEntry> trend;
+    }
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    static class YahooTrendEntry {
+        private String period;
+        private YahooRevenueEstimate revenueEstimate;
+    }
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    static class YahooRevenueEstimate {
+        private YahooRawValue avg;
     }
 
     @Data @JsonIgnoreProperties(ignoreUnknown = true)
