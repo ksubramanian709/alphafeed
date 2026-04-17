@@ -33,9 +33,9 @@ public class CacheConfig {
         manager.registerCustomCache("wasde",
                 Caffeine.newBuilder().expireAfterWrite(12, TimeUnit.HOURS).maximumSize(10).build());
 
-        // News — refreshed every 30 minutes
+        // News — refreshed every 10 minutes so articles cycle in quickly
         manager.registerCustomCache("news",
-                Caffeine.newBuilder().expireAfterWrite(30, TimeUnit.MINUTES).maximumSize(100).build());
+                Caffeine.newBuilder().expireAfterWrite(10, TimeUnit.MINUTES).maximumSize(100).build());
 
         // Markets overview strip — 60s TTL, larger size for expanded symbol set
         manager.registerCustomCache("markets",

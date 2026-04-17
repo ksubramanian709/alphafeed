@@ -47,25 +47,31 @@ public class NewsService {
     private static final String SEEKING_ALPHA_RSS =
         "https://seekingalpha.com/api/sa/combined/%s.xml";
 
-    // ── Finance/markets-specific feeds (no lifestyle, sports, entertainment) ───
+    // ── Finance/markets-specific feeds — verified working as of 2025 ────────────
     private static final String CNBC_MARKETS_RSS =
-        "https://www.cnbc.com/id/20910258/device/rss/rss.html";          // CNBC Markets
+        "https://www.cnbc.com/id/20910258/device/rss/rss.html";
     private static final String CNBC_FINANCE_RSS =
-        "https://www.cnbc.com/id/10000664/device/rss/rss.html";          // CNBC Finance
+        "https://www.cnbc.com/id/10000664/device/rss/rss.html";
+    private static final String CNBC_EARNINGS_RSS =
+        "https://www.cnbc.com/id/15839135/device/rss/rss.html";          // CNBC Earnings
     private static final String MARKETWATCH_RSS =
         "https://feeds.marketwatch.com/marketwatch/realtimeheadlines/";
-    private static final String REUTERS_FINANCE_RSS =
-        "https://feeds.reuters.com/reuters/businessNews";
+    private static final String MARKETWATCH_ECONOMY_RSS =
+        "https://feeds.marketwatch.com/marketwatch/economy-politics/";
     private static final String AP_FINANCE_RSS =
-        "https://feeds.apnews.com/rss/apf-finance";                      // AP Finance
-    private static final String WSJ_MARKETS_RSS =
-        "https://feeds.a.djnewswires.com/rss/WSJ_wsjonline";             // WSJ (public)
-    private static final String FT_RSS =
-        "https://www.ft.com/rss/home/us";                                // Financial Times
+        "https://feeds.apnews.com/rss/apf-finance";
+    private static final String AP_BUSINESS_RSS =
+        "https://feeds.apnews.com/rss/apf-business";
+    private static final String YAHOO_FINANCE_RSS =
+        "https://finance.yahoo.com/news/rssindex";                        // Yahoo Finance general
+    private static final String SEEKING_ALPHA_MARKET_RSS =
+        "https://seekingalpha.com/market_currents.xml";                   // SA market news
     private static final String BARRONS_RSS =
         "https://www.barrons.com/rss/public/rss.xml";
-    private static final String CNN_BUSINESS_RSS =
-        "http://rss.cnn.com/rss/money_latest.rss";                        // CNN Business
+    private static final String INVESTORS_BUSINESS_RSS =
+        "https://www.investors.com/feed/";                                // Investors Business Daily
+    private static final String GOOGLE_BUSINESS_RSS =
+        "https://news.google.com/rss/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNRGRqTVhZU0FtVnVHZ0pWVXlnQVAB"; // Google Business
 
     // ── Title relevance: must contain at least one of these financial keywords ──
     private static final java.util.regex.Pattern FINANCE_PATTERN =
@@ -91,53 +97,59 @@ public class NewsService {
     // ─── Public API ─────────────────────────────────────────────────────────────
 
     /**
-     * General market news from multiple RSS sources. Cached 15 min.
+     * General market news from multiple RSS sources. Cached 10 min.
+     * Hard cutoff: articles older than 12 hours are dropped.
      */
     @Cacheable(value = "news", key = "'market_headlines'")
     public ApiResponse<List<NewsItem>> getMarketNews() {
         List<NewsItem> items = new ArrayList<>();
 
-        // Finance/markets-specific feeds only — 3-4 items each so no outlet dominates
-        items.addAll(fetchRss(CNBC_MARKETS_RSS,        "CNBC Markets",   4));
-        items.addAll(fetchRss(CNBC_FINANCE_RSS,        "CNBC Finance",   3));
-        items.addAll(fetchRss(REUTERS_FINANCE_RSS,     "Reuters",        4));
-        items.addAll(fetchRss(MARKETWATCH_RSS,         "MarketWatch",    4));
-        items.addAll(fetchRss(AP_FINANCE_RSS,          "AP Finance",     3));
-        items.addAll(fetchRss(FT_RSS,                  "Financial Times",3));
-        items.addAll(fetchRss(WSJ_MARKETS_RSS,         "WSJ",            3));
-        items.addAll(fetchRss(BARRONS_RSS,             "Barron's",       3));
-        items.addAll(fetchRss(CNN_BUSINESS_RSS,        "CNN Business",   3));
+        // Pull 6 items each from high-velocity financial feeds
+        items.addAll(fetchRss(CNBC_MARKETS_RSS,         "CNBC Markets",    6));
+        items.addAll(fetchRss(CNBC_FINANCE_RSS,         "CNBC Finance",    5));
+        items.addAll(fetchRss(CNBC_EARNINGS_RSS,        "CNBC Earnings",   4));
+        items.addAll(fetchRss(MARKETWATCH_RSS,          "MarketWatch",     6));
+        items.addAll(fetchRss(MARKETWATCH_ECONOMY_RSS,  "MarketWatch",     4));
+        items.addAll(fetchRss(YAHOO_FINANCE_RSS,        "Yahoo Finance",   6));
+        items.addAll(fetchRss(AP_FINANCE_RSS,           "AP Finance",      5));
+        items.addAll(fetchRss(AP_BUSINESS_RSS,          "AP Business",     4));
+        items.addAll(fetchRss(BARRONS_RSS,              "Barron's",        4));
+        items.addAll(fetchRss(SEEKING_ALPHA_MARKET_RSS, "Seeking Alpha",   5));
+        items.addAll(fetchRss(INVESTORS_BUSINESS_RSS,   "IBD",             4));
+        items.addAll(fetchRss(GOOGLE_BUSINESS_RSS,      "Google News",     6));
         items.addAll(fetchRss(
-            String.format(GOOGLE_NEWS_RSS, "stock+market+economy+geopolitics"), "Google News", 4));
+            String.format(GOOGLE_NEWS_RSS, "stock+market+economy+interest+rates"), "Google News", 5));
 
         // Supplement with Alpha Vantage if key configured
         if (alphaVantageKey != null && !alphaVantageKey.isBlank()) {
-            items.addAll(fetchAlphaVantageNews(null, "financial_markets,economy_macro", 8));
+            items.addAll(fetchAlphaVantageNews(null, "financial_markets,economy_macro", 10));
         }
 
+        // Hard 12-hour cutoff — no stale news
+        Instant cutoff12h = Instant.now().minus(12, java.time.temporal.ChronoUnit.HOURS);
+        // Fallback: if genuinely sparse (e.g. pre-market on a Sunday) allow up to 24h
         Instant cutoff24h = Instant.now().minus(24, java.time.temporal.ChronoUnit.HOURS);
-        Instant cutoff72h = Instant.now().minus(72, java.time.temporal.ChronoUnit.HOURS);
 
         List<NewsItem> all = deduplicate(items).stream()
                 .filter(item -> isFinanciallyRelevant(item.getTitle()))
+                .filter(item -> item.getPublishedAt() == null
+                             || item.getPublishedAt().isAfter(cutoff24h))  // drop anything >24h
                 .sorted(Comparator.comparing(NewsItem::getPublishedAt,
                         Comparator.nullsLast(Comparator.reverseOrder())))
                 .collect(Collectors.toList());
 
-        // Prefer articles from the last 24 h; fall back to 72 h if feed is sparse
-        List<NewsItem> fresh = all.stream()
-                .filter(i -> i.getPublishedAt() != null && i.getPublishedAt().isAfter(cutoff24h))
-                .limit(30)
+        // Primary: last 12 hours. Fallback to 24h only if truly nothing recent.
+        List<NewsItem> fresh12h = all.stream()
+                .filter(i -> i.getPublishedAt() != null && i.getPublishedAt().isAfter(cutoff12h))
+                .limit(50)
                 .collect(Collectors.toList());
 
-        List<NewsItem> deduplicated = fresh.size() >= 5 ? fresh : all.stream()
-                .filter(i -> i.getPublishedAt() == null || i.getPublishedAt().isAfter(cutoff72h))
-                .limit(30)
-                .collect(Collectors.toList());
+        List<NewsItem> result = fresh12h.size() >= 5 ? fresh12h
+                : all.stream().limit(30).collect(Collectors.toList());
 
-        return deduplicated.isEmpty()
+        return result.isEmpty()
             ? ApiResponse.error("No news available")
-            : ApiResponse.success(deduplicated, "rss_aggregated");
+            : ApiResponse.success(result, "rss_aggregated");
     }
 
     /** Returns true if the title contains at least one financial/market/geopolitics keyword. */

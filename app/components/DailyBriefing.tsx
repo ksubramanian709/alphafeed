@@ -47,22 +47,25 @@ function sentimentDot(s: string) {
   return null
 }
 
+const MAX_AGE_MS = 12 * 60 * 60 * 1000  // 12-hour hard cutoff
+
 function bucketize(items: NewsItem[]): Bucket[] {
   const breaking:  NewsItem[] = []
-  const morning:   NewsItem[] = []
-  const today:     NewsItem[] = []
+  const recent:    NewsItem[] = []
+  const earlier:   NewsItem[] = []
 
   for (const item of items) {
     const ms = ageMs(item.publishedAt)
-    if (ms < 60 * 60 * 1000)       breaking.push(item)   // < 1h
-    else if (ms < 8 * 60 * 60 * 1000)  morning.push(item)   // < 8h
-    else                           today.push(item)      // < 24h
+    if (ms > MAX_AGE_MS) continue            // drop anything older than 12h
+    if (ms < 60 * 60 * 1000)      breaking.push(item)   // < 1h
+    else if (ms < 4 * 60 * 60 * 1000) recent.push(item) // 1h – 4h
+    else                           earlier.push(item)   // 4h – 12h
   }
 
   const buckets: Bucket[] = []
-  if (breaking.length)  buckets.push({ label: 'Breaking',     icon: '🔴', color: 'text-red-400',    items: breaking })
-  if (morning.length)   buckets.push({ label: 'This Morning', icon: '🌅', color: 'text-amber-400',  items: morning  })
-  if (today.length)     buckets.push({ label: 'Earlier Today',icon: '📰', color: 'text-slate-400',  items: today    })
+  if (breaking.length) buckets.push({ label: 'Breaking',       icon: '🔴', color: 'text-red-400',   items: breaking })
+  if (recent.length)   buckets.push({ label: 'Last Few Hours', icon: '🌅', color: 'text-amber-400', items: recent   })
+  if (earlier.length)  buckets.push({ label: 'Earlier Today',  icon: '📰', color: 'text-slate-400', items: earlier  })
   return buckets
 }
 
@@ -144,7 +147,7 @@ export default function DailyBriefing() {
 
   useEffect(() => {
     load()
-    const id = setInterval(load, 30 * 60 * 1000) // refresh every 30 min
+    const id = setInterval(load, 10 * 60 * 1000) // refresh every 10 min to cycle in fresh articles
     return () => clearInterval(id)
   }, [load])
 
@@ -205,11 +208,11 @@ export default function DailyBriefing() {
         <div className="px-5 py-6 text-center text-slate-600 text-sm">{error}</div>
       )}
 
-      {/* No news yet */}
+      {/* No recent news */}
       {!loading && !error && buckets.length === 0 && (
         <div className="px-5 py-8 text-center">
-          <p className="text-slate-500 text-sm">No news in the last 24 hours yet.</p>
-          <p className="text-slate-700 text-xs mt-1">Check back after markets open.</p>
+          <p className="text-slate-500 text-sm">No news in the last 12 hours.</p>
+          <p className="text-slate-700 text-xs mt-1">Feeds refresh every 10 minutes — check back when markets open.</p>
         </div>
       )}
 
