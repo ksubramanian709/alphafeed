@@ -196,43 +196,53 @@ export default function TickerPage() {
             </div>
 
             {/* ── Key stats grid ── */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-5">
-              {[
-                { label: 'Open',       value: fmt(quote.open) },
-                { label: 'High',       value: fmt(quote.high) },
-                { label: 'Low',        value: fmt(quote.low) },
-                { label: 'Volume',     value: fmtVol(quote.volume) },
-                { label: 'Mkt Cap',    value: fmtLarge(quote.marketCap) },
-                { label: '52W High',   value: quote.fiftyTwoWeekHigh ? fmt(quote.fiftyTwoWeekHigh) : '—' },
-                { label: '52W Low',    value: quote.fiftyTwoWeekLow  ? fmt(quote.fiftyTwoWeekLow)  : '—' },
-                { label: 'Currency',   value: quote.currency ?? '—' },
-              ].map(({ label, value }) => (
-                <div key={label} className="bg-slate-800 rounded-lg px-3 py-2">
-                  <div className="text-xs text-slate-500 mb-0.5">{label}</div>
-                  <div className="font-mono text-sm text-slate-200 truncate">{value}</div>
-                </div>
-              ))}
-            </div>
+            {(() => {
+              const isFx = quote.assetType === 'CURRENCY'
+              const dp = isFx ? 4 : 2
+              const fmtP = (n: number) => n > 0 ? n.toFixed(dp) : '—'
+              const stats = [
+                { label: 'Open',     value: quote.open  > 0 ? fmtP(quote.open)  : '—' },
+                { label: 'High',     value: quote.high  > 0 ? fmtP(quote.high)  : '—' },
+                { label: 'Low',      value: quote.low   > 0 ? fmtP(quote.low)   : '—' },
+                { label: 'Volume',   value: fmtVol(quote.volume) },
+                ...(!isFx ? [{ label: 'Mkt Cap', value: fmtLarge(quote.marketCap) }] : []),
+                { label: '52W High', value: quote.fiftyTwoWeekHigh ? fmtP(quote.fiftyTwoWeekHigh) : '—' },
+                { label: '52W Low',  value: quote.fiftyTwoWeekLow  ? fmtP(quote.fiftyTwoWeekLow)  : '—' },
+                { label: 'Currency', value: quote.currency ?? '—' },
+              ]
+              return (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-5">
+                    {stats.map(({ label, value }) => (
+                      <div key={label} className="bg-slate-800 rounded-lg px-3 py-2">
+                        <div className="text-xs text-slate-500 mb-0.5">{label}</div>
+                        <div className="font-mono text-sm text-slate-200 truncate">{value}</div>
+                      </div>
+                    ))}
+                  </div>
 
-            {/* ── 52-week range bar ── */}
-            {rangePos !== null && (
-              <div className="mt-4">
-                <div className="flex justify-between text-xs text-slate-600 font-mono mb-1">
-                  <span>52W Low {fmt(quote.fiftyTwoWeekLow)}</span>
-                  <span>52W High {fmt(quote.fiftyTwoWeekHigh)}</span>
-                </div>
-                <div className="h-1.5 bg-slate-700 rounded-full relative">
-                  <div
-                    className={`h-full rounded-full ${cls.replace('text-', 'bg-')}`}
-                    style={{ width: `${rangePos}%` }}
-                  />
-                  <div
-                    className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white border-2 border-slate-900"
-                    style={{ left: `calc(${rangePos}% - 5px)` }}
-                  />
-                </div>
-              </div>
-            )}
+                  {/* ── 52-week range bar ── */}
+                  {rangePos !== null && (
+                    <div className="mt-4">
+                      <div className="flex justify-between text-xs text-slate-600 font-mono mb-1">
+                        <span>52W Low {isFx ? quote.fiftyTwoWeekLow.toFixed(4) : fmt(quote.fiftyTwoWeekLow)}</span>
+                        <span>52W High {isFx ? quote.fiftyTwoWeekHigh.toFixed(4) : fmt(quote.fiftyTwoWeekHigh)}</span>
+                      </div>
+                      <div className="h-1.5 bg-slate-700 rounded-full relative">
+                        <div
+                          className={`h-full rounded-full ${cls.replace('text-', 'bg-')}`}
+                          style={{ width: `${rangePos}%` }}
+                        />
+                        <div
+                          className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white border-2 border-slate-900"
+                          style={{ left: `calc(${rangePos}% - 5px)` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </>
+              )
+            })()}
           </div>
 
           {/* ── Price chart ── */}
@@ -246,7 +256,7 @@ export default function TickerPage() {
           {/* ── AI Insights — all asset types ── */}
           <AIInsights symbol={quote.symbol} assetType={quote.assetType} />
 
-          {/* ── Fundamentals / Earnings / Options — equities only ── */}
+          {/* ── Fundamentals / Earnings / Options — equities & ETFs only ── */}
           {(quote.assetType === 'EQUITY' || quote.assetType === 'ETF') && (
             <>
               <FundamentalsPanel symbol={quote.symbol} currentPrice={quote.price} />
@@ -255,7 +265,33 @@ export default function TickerPage() {
             </>
           )}
 
-          {/* ── Company news ── */}
+          {/* ── Forex / Futures context block ── */}
+          {(quote.assetType === 'CURRENCY' || quote.assetType === 'FUTURE' || quote.assetType === 'INDEX') && (
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-4">
+                {quote.assetType === 'CURRENCY' ? 'Currency Pair Info'
+                  : quote.assetType === 'FUTURE' ? 'Futures Contract Info'
+                  : 'Index Info'}
+              </h2>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {[
+                  { label: 'Asset Type',  value: quote.assetType },
+                  { label: 'Currency',    value: quote.currency ?? '—' },
+                  { label: 'Market State',value: quote.marketState ?? 'Regular' },
+                  { label: '52W High',    value: quote.fiftyTwoWeekHigh ? quote.fiftyTwoWeekHigh.toFixed(4) : '—' },
+                  { label: '52W Low',     value: quote.fiftyTwoWeekLow  ? quote.fiftyTwoWeekLow.toFixed(4)  : '—' },
+                  { label: 'Volume',      value: quote.volume ? fmtVol(quote.volume) : '—' },
+                ].map(({ label, value }) => (
+                  <div key={label} className="bg-slate-800 rounded-lg px-3 py-2">
+                    <div className="text-xs text-slate-500 mb-0.5">{label}</div>
+                    <div className="font-mono text-sm text-slate-200 truncate">{value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── News — all asset types ── */}
           <NewsFeed symbol={quote.symbol} limit={10} title={`${quote.symbol} Headlines`} />
         </>
       )}

@@ -12,4 +12,6 @@ public class QuarterlyEarning {
     private Double estimatedEps;
     private Double surprise;
     private Double surprisePercentage;
+    private Long   reportedRevenue;      // quarterly revenue in dollars (from income statement)
+    private Long   estimatedRevenue;     // analyst consensus revenue estimate for the quarter
 }

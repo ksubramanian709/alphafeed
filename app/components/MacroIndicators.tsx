@@ -61,10 +61,8 @@ export default function MacroIndicators() {
     ? data.DGS10.value - data.DGS2.value
     : null
 
-  // Hide entirely if FRED data is unavailable (key not set → empty data object)
   const hasData = data && Object.keys(data).length > 0
   if (!loading && !hasData && !error) return null
-  if (!loading && error.includes('FRED_API_KEY')) return null
 
   return (
     <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden">
@@ -80,8 +78,12 @@ export default function MacroIndicators() {
 
       {loading && <div className="text-slate-600 text-sm">Loading…</div>}
 
-      {error && !data && !error.includes('FRED_API_KEY') && (
-        <div className="text-slate-600 text-sm">{error}</div>
+      {error && !data && (
+        <div className="text-slate-600 text-sm">
+          {error.includes('FRED_API_KEY')
+            ? 'Macro data unavailable — FRED API key not configured.'
+            : error}
+        </div>
       )}
 
       {data && (

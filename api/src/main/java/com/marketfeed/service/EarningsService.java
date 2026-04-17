@@ -115,13 +115,14 @@ public class EarningsService {
     }
 
     /**
-     * Fetch earnings history from Yahoo Finance quoteSummary earnings module.
-     * Real-time, no API key, updates immediately when earnings are released.
+     * Fetch earnings history from Yahoo Finance quoteSummary.
+     * Fetches earnings + income statement quarterly in one call — no API key, updates immediately.
      */
     public EarningsHistory getEarningsFromYahoo(String symbol) {
         try {
             String url = "https://query1.finance.yahoo.com/v10/finance/quoteSummary/"
-                       + symbol.toUpperCase() + "?modules=earnings";
+                       + symbol.toUpperCase()
+                       + "?modules=earnings%2CincomeStatementHistoryQuarterly";
             HttpHeaders headers = new HttpHeaders();
             headers.set(HttpHeaders.USER_AGENT, "Mozilla/5.0 (compatible)");
             headers.set(HttpHeaders.ACCEPT, "application/json");
@@ -137,13 +138,27 @@ public class EarningsService {
             if (results == null || results.isEmpty()) {
                 return EarningsHistory.builder().symbol(symbol).error("No Yahoo results").build();
             }
-            YahooEarningsModule earningsMod = results.get(0).getEarnings();
+            YahooEarningsResult result0 = results.get(0);
+            YahooEarningsModule earningsMod = result0.getEarnings();
             if (earningsMod == null || earningsMod.getEarningsChart() == null) {
                 return EarningsHistory.builder().symbol(symbol).error("No earnings chart").build();
             }
             List<YahooQuarterlyEarning> quarters = earningsMod.getEarningsChart().getQuarterly();
             if (quarters == null || quarters.isEmpty()) {
                 return EarningsHistory.builder().symbol(symbol).error("No quarterly data").build();
+            }
+
+            // Build revenue map: ISO date -> revenue in dollars (from income statement)
+            Map<String, Long> revenueByDate = new HashMap<>();
+            Map<String, Long> revEstByDate  = new HashMap<>();
+            if (result0.getIncomeStatementHistoryQuarterly() != null
+                    && result0.getIncomeStatementHistoryQuarterly().getIncomeStatementHistory() != null) {
+                for (YahooIncomeStmtEntry entry : result0.getIncomeStatementHistoryQuarterly().getIncomeStatementHistory()) {
+                    if (entry.getEndDate() != null && entry.getTotalRevenue() != null) {
+                        revenueByDate.put(entry.getEndDate().getFmt(),
+                                          Math.round(entry.getTotalRevenue().getRaw()));
+                    }
+                }
             }
 
             // Yahoo returns most recent first; convert quarter label to ISO date
@@ -154,14 +169,17 @@ public class EarningsService {
                 Double surprise  = (reported != null && estimated != null) ? reported - estimated : null;
                 Double surprisePct = (surprise != null && estimated != null && estimated != 0)
                                    ? (surprise / Math.abs(estimated)) * 100 : null;
+                String isoDate   = yahooQuarterToDate(q.getDate());
 
                 out.add(QuarterlyEarning.builder()
-                        .fiscalDateEnding(yahooQuarterToDate(q.getDate()))
+                        .fiscalDateEnding(isoDate)
                         .reportedDate(null)
                         .reportedEps(reported)
                         .estimatedEps(estimated)
                         .surprise(surprise)
                         .surprisePercentage(surprisePct)
+                        .reportedRevenue(revenueByDate.get(isoDate))
+                        .estimatedRevenue(revEstByDate.get(isoDate))
                         .build());
             }
 
@@ -170,6 +188,39 @@ public class EarningsService {
         } catch (Exception e) {
             log.debug("Yahoo earnings fetch failed for {}: {}", symbol, e.getMessage());
             return EarningsHistory.builder().symbol(symbol).error(e.getMessage()).build();
+        }
+    }
+
+    /**
+     * Fetch the forward revenue estimate for the current quarter from Yahoo earningsTrend.
+     * Returns null if unavailable.
+     */
+    private Long fetchForwardRevenueEstimate(String symbol) {
+        try {
+            String url = "https://query1.finance.yahoo.com/v10/finance/quoteSummary/"
+                       + symbol.toUpperCase() + "?modules=earningsTrend";
+            HttpHeaders headers = new HttpHeaders();
+            headers.set(HttpHeaders.USER_AGENT, "Mozilla/5.0 (compatible)");
+            headers.set(HttpHeaders.ACCEPT, "application/json");
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+            ResponseEntity<YahooEarningsResp> resp = restTemplate.exchange(
+                    url, HttpMethod.GET, entity, YahooEarningsResp.class);
+            if (resp.getBody() == null || resp.getBody().getQuoteSummary() == null) return null;
+            List<YahooEarningsResult> results = resp.getBody().getQuoteSummary().getResult();
+            if (results == null || results.isEmpty()) return null;
+            YahooEarningsTrendWrapper trendWrapper = results.get(0).getEarningsTrend();
+            if (trendWrapper == null || trendWrapper.getTrend() == null) return null;
+
+            return trendWrapper.getTrend().stream()
+                    .filter(t -> "0q".equals(t.getPeriod()))
+                    .findFirst()
+                    .map(t -> t.getRevenueEstimate() != null && t.getRevenueEstimate().getAvg() != null
+                            ? Math.round(t.getRevenueEstimate().getAvg().getRaw()) : null)
+                    .orElse(null);
+        } catch (Exception e) {
+            log.debug("Revenue estimate fetch failed for {}: {}", symbol, e.getMessage());
+            return null;
         }
     }
 

@@ -362,7 +362,7 @@ export default function EarningsPage() {
 
   async function load() {
     try {
-      const res  = await fetch(`${API}/v1/earnings/week`)
+      const res  = await fetch(`${API}/v1/earnings/calendar`)
       const json = await res.json()
       if (Array.isArray(json)) {
         setSetups(json)

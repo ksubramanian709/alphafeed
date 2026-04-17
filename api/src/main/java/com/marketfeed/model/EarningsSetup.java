@@ -41,4 +41,9 @@ public class EarningsSetup {
     private Double reportedEps;       // actual EPS reported
     private Double epsSurprise;       // reported - estimated
     private Double epsSurprisePct;    // (reported - estimated) / |estimated| * 100
+
+    // Revenue data
+    private Long   revenueEstimate;   // analyst consensus forward revenue estimate (upcoming reports)
+    private Long   reportedRevenue;   // actual revenue from most recent quarter (already-reported)
+    private Long   lastYearRevenue;   // year-ago quarterly revenue for YoY comparison
 }
