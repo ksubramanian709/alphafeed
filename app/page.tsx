@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import MarketPulse from './components/MarketPulse'
 import QuoteSearch from './components/QuoteSearch'
 import HomeTabs from './components/HomeTabs'
@@ -111,15 +112,22 @@ export default function Home() {
           <QuoteSearch />
         </div>
 
-        {/* Market coverage tags */}
+        {/* Market coverage tags — each links to the relevant page/tab */}
         <div className="flex items-center justify-center gap-2 mt-5 flex-wrap">
-          {['NYSE', 'NASDAQ', 'Crypto', 'Commodities', 'Forex', 'Macro'].map(label => (
-            <span key={label}
+          {[
+            { label: 'NYSE',        href: '/screener'       },
+            { label: 'NASDAQ',      href: '/screener'       },
+            { label: 'Crypto',      href: '/?tab=markets'   },
+            { label: 'Commodities', href: '/?tab=markets'   },
+            { label: 'Forex',       href: '/?tab=markets'   },
+            { label: 'Macro',       href: '/?tab=markets'   },
+          ].map(({ label, href }) => (
+            <Link key={label} href={href}
               className="text-[10px] uppercase tracking-widest text-slate-600
-                border border-slate-800 px-2.5 py-1 rounded-full hover:border-slate-700
-                hover:text-slate-500 transition-colors cursor-default">
+                border border-slate-800 px-2.5 py-1 rounded-full hover:border-emerald-500/40
+                hover:text-emerald-500 hover:bg-emerald-500/5 transition-all">
               {label}
-            </span>
+            </Link>
           ))}
         </div>
       </div>

@@ -1,5 +1,6 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import DailyBriefing from './DailyBriefing'
 import AgentChat from './AgentChat'
@@ -201,8 +202,18 @@ function WatchlistTab() {
 
 // ── Main export ────────────────────────────────────────────────────────────────
 
-export default function HomeTabs() {
-  const [active, setActive] = useState<TabId>('news')
+function HomeTabsInner() {
+  const searchParams = useSearchParams()
+  const initialTab = (searchParams.get('tab') as TabId | null) ?? 'news'
+  const [active, setActive] = useState<TabId>(
+    ['news', 'markets', 'watchlist'].includes(initialTab) ? initialTab : 'news'
+  )
+
+  // If the URL tab param changes (e.g. browser back/forward), sync state
+  useEffect(() => {
+    const t = searchParams.get('tab') as TabId | null
+    if (t && ['news', 'markets', 'watchlist'].includes(t)) setActive(t)
+  }, [searchParams])
 
   return (
     <div className="space-y-5">
@@ -225,5 +236,13 @@ export default function HomeTabs() {
         {active === 'watchlist' && <WatchlistTab />}
       </div>
     </div>
+  )
+}
+
+export default function HomeTabs() {
+  return (
+    <Suspense fallback={<div className="h-96 rounded-2xl bg-slate-900 border border-slate-800 animate-pulse" />}>
+      <HomeTabsInner />
+    </Suspense>
   )
 }
