@@ -124,44 +124,33 @@ export default function TickerPage() {
     return () => clearInterval(id)
   }, [symbol])
 
-  // Real-time WebSocket feed for crypto symbols streamed by Binance
+  // SSE stream for real-time Binance ticks — routed through Next.js edge (same-origin, no proxy issues)
   useEffect(() => {
     if (!LIVE_CRYPTO.has(symbol)) return
-    const wsBase = process.env.NEXT_PUBLIC_API_URL?.replace(/^http/, 'ws') ?? 'ws://localhost:8080'
-    let ws: WebSocket
-    let reconnectTimer: ReturnType<typeof setTimeout>
 
-    function connect() {
-      ws = new WebSocket(`${wsBase}/v1/stream/quotes`)
-      ws.onopen = () => {
-        setWsConnected(true)
-        ws.send(JSON.stringify({ action: 'subscribe', symbols: [symbol] }))
-      }
-      ws.onmessage = (evt) => {
-        try {
-          const msg = JSON.parse(evt.data)
-          if (msg.type === 'quote' && msg.symbol === symbol && msg.price != null) {
-            const newPrice = msg.price as number
-            if (prevPriceRef.current !== null && newPrice !== prevPriceRef.current) {
-              setPriceFlash(newPrice > prevPriceRef.current ? 'up' : 'dn')
-              setTimeout(() => setPriceFlash(null), 900)
-            }
-            prevPriceRef.current = newPrice
-            setTickCount(n => n + 1)
-            setLiveQuote({ price: newPrice, change: msg.change ?? 0, changePercent: msg.changePercent ?? 0 })
+    const es = new EventSource(`/api/stream/quotes?symbols=${encodeURIComponent(symbol)}`)
+
+    es.onopen = () => setWsConnected(true)
+
+    es.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data)
+        if (msg.type === 'quote' && msg.symbol === symbol && msg.price != null) {
+          const newPrice = msg.price as number
+          if (prevPriceRef.current !== null && newPrice !== prevPriceRef.current) {
+            setPriceFlash(newPrice > prevPriceRef.current ? 'up' : 'dn')
+            setTimeout(() => setPriceFlash(null), 900)
           }
-        } catch { /* ignore */ }
-      }
-      ws.onclose = () => { setWsConnected(false); reconnectTimer = setTimeout(connect, 5000) }
-      ws.onerror = () => { ws.close() }
+          prevPriceRef.current = newPrice
+          setTickCount(n => n + 1)
+          setLiveQuote({ price: newPrice, change: msg.change ?? 0, changePercent: msg.changePercent ?? 0 })
+        }
+      } catch { /* ignore */ }
     }
 
-    connect()
-    const pingId = setInterval(() => {
-      if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ action: 'ping' }))
-    }, 25_000)
+    es.onerror = () => setWsConnected(false)
 
-    return () => { clearTimeout(reconnectTimer); clearInterval(pingId); ws?.close() }
+    return () => es.close()
   }, [symbol])
 
   const displayPrice         = liveQuote?.price         ?? quote?.price         ?? 0

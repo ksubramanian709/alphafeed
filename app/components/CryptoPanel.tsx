@@ -129,10 +129,9 @@ export default function CryptoPanel() {
   const [error, setError]           = useState('')
   const [filter, setFilter]         = useState('')
   const [lastUpdate, setLastUpdate] = useState('')
-  // live prices from backend WebSocket: symbol → { price, change24h }
+  // live prices from backend SSE stream: symbol → { price, change24h }
   const [livePrices, setLivePrices] = useState<Record<string, { price: number; change24h: number }>>({})
   const [wsConnected, setWsConnected] = useState(false)
-  const wsRef = useRef<WebSocket | null>(null)
   const cache = useRef<Record<number, Coin[]>>({})
 
   async function fetchPage(page: number, isRefresh = false) {
@@ -205,57 +204,29 @@ export default function CryptoPanel() {
     return () => clearInterval(id)
   }, [load])
 
-  // Connect to backend WebSocket for real-time Binance price updates
+  // SSE stream — connects through Next.js edge route (same-origin, no CORS, no WS upgrade issues)
+  // EventSource auto-reconnects on close, so no manual reconnect logic needed
   useEffect(() => {
-    const wsBase = process.env.NEXT_PUBLIC_API_URL?.replace(/^http/, 'ws') ?? 'ws://localhost:8080'
-    let ws: WebSocket
-    let reconnectTimer: ReturnType<typeof setTimeout>
+    const symbols = Array.from(BINANCE_SYMBOLS).join(',')
+    const es = new EventSource(`/api/stream/quotes?symbols=${encodeURIComponent(symbols)}`)
 
-    function connect() {
-      ws = new WebSocket(`${wsBase}/v1/stream/quotes`)
-      wsRef.current = ws
+    es.onopen = () => setWsConnected(true)
 
-      ws.onopen = () => {
-        setWsConnected(true)
-        const symbols = Array.from(BINANCE_SYMBOLS)
-        ws.send(JSON.stringify({ action: 'subscribe', symbols }))
-      }
-
-      ws.onmessage = (evt) => {
-        try {
-          const msg = JSON.parse(evt.data)
-          if (msg.type === 'quote' && msg.symbol && msg.price != null) {
-            setLivePrices(prev => ({
-              ...prev,
-              [msg.symbol]: { price: msg.price, change24h: msg.changePercent ?? 0 }
-            }))
-          }
-        } catch { /* ignore parse errors */ }
-      }
-
-      ws.onclose = () => {
-        setWsConnected(false)
-        reconnectTimer = setTimeout(connect, 5000)
-      }
-
-      ws.onerror = () => {
-        ws.close()
-      }
+    es.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data)
+        if (msg.type === 'quote' && msg.symbol && msg.price != null) {
+          setLivePrices(prev => ({
+            ...prev,
+            [msg.symbol]: { price: msg.price, change24h: msg.changePercent ?? 0 }
+          }))
+        }
+      } catch { /* ignore parse errors */ }
     }
 
-    connect()
-    // Ping every 25s to keep Railway's reverse proxy from closing the connection
-    const pingId = setInterval(() => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ action: 'ping' }))
-      }
-    }, 25_000)
+    es.onerror = () => setWsConnected(false)
 
-    return () => {
-      clearTimeout(reconnectTimer)
-      clearInterval(pingId)
-      ws?.close()
-    }
+    return () => es.close()
   }, [])
 
   const allCoins = pages.flat()
