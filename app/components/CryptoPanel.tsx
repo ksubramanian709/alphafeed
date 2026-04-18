@@ -125,7 +125,7 @@ export default function CryptoPanel() {
 
   async function loadMore() {
     const next = currentPage + 1
-    if (next > 3) return // cap at 300 coins
+    if (next > 3) return
     setLoadingMore(true)
     try {
       const data = await fetchPage(next)
@@ -135,10 +135,28 @@ export default function CryptoPanel() {
     finally { setLoadingMore(false) }
   }
 
+  // When user starts searching, silently pre-fetch all remaining pages
+  useEffect(() => {
+    if (!filter.trim() || currentPage >= 3) return
+    const fetchRemaining = async () => {
+      for (let p = currentPage + 1; p <= 3; p++) {
+        try {
+          const data = await fetchPage(p)
+          setPages(prev => {
+            if (prev.length >= p) return prev // already have it
+            return [...prev, data]
+          })
+          setCurrentPage(p)
+        } catch { break }
+      }
+    }
+    fetchRemaining()
+  }, [filter, currentPage])
+
   useEffect(() => {
     load(true)
     const id = setInterval(() => {
-      cache.current = {} // invalidate cache on refresh
+      cache.current = {}
       load(true)
     }, 60_000)
     return () => clearInterval(id)
@@ -243,9 +261,11 @@ export default function CryptoPanel() {
             {loadingMore ? 'Loading…' : `Load more (${currentPage * 100} shown)`}
           </button>
         )}
-        {!loading && !filter && currentPage >= 3 && (
+        {!loading && (filter ? currentPage >= 1 : currentPage >= 3) && !loadingMore && (
           <div className="py-3 text-center text-[10px] text-slate-700 border-t border-slate-800">
-            Showing top 300 coins by market cap · Use search for others
+            {filter
+              ? `Searching across top ${allCoins.length} coins`
+              : 'Showing top 300 coins by market cap'}
           </div>
         )}
       </div>
