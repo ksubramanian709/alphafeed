@@ -41,8 +41,19 @@ function fmtCap(n: number): string {
 }
 
 function CoinRow({ coin, live }: { coin: Coin; live?: { price: number; change24h: number } }) {
-  const price    = live?.price    ?? coin.price
+  const price     = live?.price    ?? coin.price
   const change24h = live?.change24h ?? coin.change24h
+  const prevPriceRef = useRef(price)
+  const [flash, setFlash] = useState<'up' | 'dn' | null>(null)
+
+  useEffect(() => {
+    if (price === prevPriceRef.current) return
+    setFlash(price > prevPriceRef.current ? 'up' : 'dn')
+    prevPriceRef.current = price
+    const t = setTimeout(() => setFlash(null), 600)
+    return () => clearTimeout(t)
+  }, [price])
+
   const up    = change24h > 0
   const dn    = change24h < 0
   const color = up ? 'text-green-400' : dn ? 'text-red-400' : 'text-slate-400'
@@ -51,7 +62,9 @@ function CoinRow({ coin, live }: { coin: Coin; live?: { price: number; change24h
   return (
     <Link
       href={`/ticker/${encodeURIComponent(coin.symbol + '-USD')}`}
-      className="group flex items-center gap-3 px-4 py-2.5 hover:bg-slate-800/60 transition-colors border-b border-slate-800/60 last:border-0"
+      className={`group flex items-center gap-3 px-4 py-2.5 transition-colors duration-300 border-b border-slate-800/60 last:border-0 ${
+        flash === 'up' ? 'bg-green-500/10' : flash === 'dn' ? 'bg-red-500/10' : 'hover:bg-slate-800/60'
+      }`}
     >
       {/* Rank */}
       <span className="text-[10px] text-slate-700 w-6 text-right shrink-0 font-mono">{coin.rank}</span>
@@ -105,6 +118,7 @@ export default function CryptoPanel() {
   const [lastUpdate, setLastUpdate] = useState('')
   // live prices from backend WebSocket: symbol → { price, change24h }
   const [livePrices, setLivePrices] = useState<Record<string, { price: number; change24h: number }>>({})
+  const [wsConnected, setWsConnected] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
   const cache = useRef<Record<number, Coin[]>>({})
 
@@ -189,6 +203,7 @@ export default function CryptoPanel() {
       wsRef.current = ws
 
       ws.onopen = () => {
+        setWsConnected(true)
         const symbols = Array.from(BINANCE_SYMBOLS)
         ws.send(JSON.stringify({ action: 'subscribe', symbols }))
       }
@@ -206,6 +221,7 @@ export default function CryptoPanel() {
       }
 
       ws.onclose = () => {
+        setWsConnected(false)
         reconnectTimer = setTimeout(connect, 5000)
       }
 
@@ -239,6 +255,12 @@ export default function CryptoPanel() {
             <path fill="#0f172a" d="M17.44 10.71c.24-1.62-.99-2.49-2.68-3.07l.55-2.19-1.33-.33-.53 2.13c-.35-.09-.71-.17-1.07-.25l.54-2.16-1.33-.33-.55 2.19c-.29-.07-.57-.13-.85-.2l.001-.005-1.84-.46-.35 1.42s.99.23.97.24c.54.13.64.49.62.77l-1.49 5.97c-.07.17-.23.43-.62.33.01.02-.97-.24-.97-.24l-.67 1.52 1.73.43c.32.08.64.17.95.25l-.56 2.23 1.33.33.55-2.19c.37.1.72.19 1.07.28l-.54 2.17 1.33.33.56-2.22c2.31.44 4.04.26 4.77-1.83.59-1.68-.03-2.65-1.24-3.28.88-.2 1.54-.78 1.72-1.97zm-3.08 4.32c-.42 1.68-3.26.77-4.18.54l.75-2.99c.92.23 3.87.69 3.43 2.45zm.42-4.35c-.38 1.53-2.74.75-3.51.56l.68-2.71c.77.19 3.24.55 2.83 2.15z"/>
           </svg>
           <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">Crypto</h2>
+          {wsConnected && (
+            <span className="flex items-center gap-1 text-[10px] text-green-400 border border-green-500/30 bg-green-500/10 px-1.5 py-0.5 rounded-full">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              LIVE
+            </span>
+          )}
           {!loading && allCoins.length > 0 && (
             <span className="text-[10px] text-slate-700 border border-slate-800 px-1.5 py-0.5 rounded-full">
               Top {allCoins.length}

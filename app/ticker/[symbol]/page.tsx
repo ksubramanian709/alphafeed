@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import PriceChart from '../../components/PriceChart'
 import NewsFeed from '../../components/NewsFeed'
@@ -9,6 +9,11 @@ import FundamentalsPanel from '../../components/FundamentalsPanel'
 import AIInsights from '../../components/AIInsights'
 
 const API = process.env.NEXT_PUBLIC_API_URL
+
+const LIVE_CRYPTO = new Set([
+  'BTC-USD','ETH-USD','SOL-USD','XRP-USD','BNB-USD',
+  'DOGE-USD','ADA-USD','AVAX-USD','LINK-USD','MATIC-USD'
+])
 
 interface Quote {
   symbol: string
@@ -64,6 +69,10 @@ export default function TickerPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
   const [lastUpdate, setLastUpdate] = useState('')
+  const [liveQuote, setLiveQuote] = useState<{ price: number; change: number; changePercent: number } | null>(null)
+  const [priceFlash, setPriceFlash] = useState<'up' | 'dn' | null>(null)
+  const [wsConnected, setWsConnected] = useState(false)
+  const prevPriceRef = useRef<number | null>(null)
 
   async function fetchQuote(isRefresh = false) {
     if (!isRefresh) setLoading(true)
@@ -105,8 +114,47 @@ export default function TickerPage() {
     return () => clearInterval(id)
   }, [symbol])
 
-  const cls  = quote ? priceClass(quote.change) : ''
-  const sign = quote && quote.change >= 0 ? '+' : ''
+  // Real-time WebSocket feed for crypto symbols streamed by Binance
+  useEffect(() => {
+    if (!LIVE_CRYPTO.has(symbol)) return
+    const wsBase = process.env.NEXT_PUBLIC_API_URL?.replace(/^http/, 'ws') ?? 'ws://localhost:8080'
+    let ws: WebSocket
+    let reconnectTimer: ReturnType<typeof setTimeout>
+
+    function connect() {
+      ws = new WebSocket(`${wsBase}/v1/stream/quotes`)
+      ws.onopen = () => {
+        setWsConnected(true)
+        ws.send(JSON.stringify({ action: 'subscribe', symbols: [symbol] }))
+      }
+      ws.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data)
+          if (msg.type === 'quote' && msg.symbol === symbol && msg.price != null) {
+            const newPrice = msg.price as number
+            if (prevPriceRef.current !== null && newPrice !== prevPriceRef.current) {
+              setPriceFlash(newPrice > prevPriceRef.current ? 'up' : 'dn')
+              setTimeout(() => setPriceFlash(null), 700)
+            }
+            prevPriceRef.current = newPrice
+            setLiveQuote({ price: newPrice, change: msg.change ?? 0, changePercent: msg.changePercent ?? 0 })
+          }
+        } catch { /* ignore */ }
+      }
+      ws.onclose = () => { setWsConnected(false); reconnectTimer = setTimeout(connect, 5000) }
+      ws.onerror = () => { ws.close() }
+    }
+
+    connect()
+    return () => { clearTimeout(reconnectTimer); ws?.close() }
+  }, [symbol])
+
+  const displayPrice         = liveQuote?.price         ?? quote?.price         ?? 0
+  const displayChange        = liveQuote?.change        ?? quote?.change        ?? 0
+  const displayChangePercent = liveQuote?.changePercent ?? quote?.changePercent ?? 0
+
+  const cls  = quote ? priceClass(liveQuote?.change ?? quote.change) : ''
+  const sign = displayChange >= 0 ? '+' : ''
 
   // 52-week range position
   const rangePos = quote && quote.fiftyTwoWeekHigh && quote.fiftyTwoWeekLow
@@ -160,12 +208,24 @@ export default function TickerPage() {
                 <p className="text-slate-400 text-sm mt-0.5">{quote.name}</p>
               </div>
               <div className="text-right">
-                <div className={`font-mono font-bold text-3xl ${cls}`}>
-                  {fmt(quote.price)}
+                {wsConnected && (
+                  <div className="flex items-center justify-end gap-1 mb-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                    <span className="text-[10px] text-green-400 font-semibold tracking-wider">LIVE</span>
+                  </div>
+                )}
+                <div className={`font-mono font-bold text-3xl transition-colors duration-300 ${cls} ${
+                  priceFlash === 'up' ? 'text-green-300' : priceFlash === 'dn' ? 'text-red-300' : ''
+                }`}>
+                  <span className={`inline-block transition-all duration-300 px-2 py-0.5 rounded-lg ${
+                    priceFlash === 'up' ? 'bg-green-500/20' : priceFlash === 'dn' ? 'bg-red-500/20' : ''
+                  }`}>
+                    {fmt(displayPrice)}
+                  </span>
                   <span className="text-sm text-slate-600 ml-1">{quote.currency}</span>
                 </div>
                 <div className={`font-mono text-sm mt-0.5 ${cls}`}>
-                  {sign}{fmt(quote.change)} ({sign}{fmt(quote.changePercent)}%) today
+                  {sign}{fmt(displayChange)} ({sign}{fmt(displayChangePercent)}%) today
                 </div>
 
                 {/* Extended hours */}
