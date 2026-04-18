@@ -14,6 +14,17 @@ interface Coin {
   rank: number
 }
 
+// Symbols that Binance streams (must match backend config, normalized form)
+const BINANCE_SYMBOLS = new Set([
+  'BTC-USD','ETH-USD','SOL-USD','XRP-USD','BNB-USD',
+  'DOGE-USD','ADA-USD','AVAX-USD','LINK-USD','MATIC-USD'
+])
+
+// Map CoinGecko symbol → BTC-USD style key used by backend
+function toWsSymbol(cgSymbol: string): string {
+  return cgSymbol.toUpperCase() + '-USD'
+}
+
 function fmtPrice(p: number): string {
   if (p >= 1000)  return p.toLocaleString('en-US', { maximumFractionDigits: 0 })
   if (p >= 1)     return p.toFixed(2)
@@ -29,11 +40,13 @@ function fmtCap(n: number): string {
   return `$${n.toLocaleString()}`
 }
 
-function CoinRow({ coin }: { coin: Coin }) {
-  const up    = coin.change24h > 0
-  const dn    = coin.change24h < 0
+function CoinRow({ coin, live }: { coin: Coin; live?: { price: number; change24h: number } }) {
+  const price    = live?.price    ?? coin.price
+  const change24h = live?.change24h ?? coin.change24h
+  const up    = change24h > 0
+  const dn    = change24h < 0
   const color = up ? 'text-green-400' : dn ? 'text-red-400' : 'text-slate-400'
-  const sign  = coin.change24h >= 0 ? '+' : ''
+  const sign  = change24h >= 0 ? '+' : ''
 
   return (
     <Link
@@ -61,12 +74,12 @@ function CoinRow({ coin }: { coin: Coin }) {
 
       {/* Price */}
       <div className={`font-mono text-sm font-bold ${color} shrink-0`}>
-        ${fmtPrice(coin.price)}
+        ${fmtPrice(price)}
       </div>
 
       {/* Change */}
       <div className={`font-mono text-xs w-16 text-right shrink-0 ${color}`}>
-        {sign}{coin.change24h.toFixed(2)}%
+        {sign}{change24h.toFixed(2)}%
       </div>
 
       {/* Market cap */}
@@ -90,6 +103,9 @@ export default function CryptoPanel() {
   const [error, setError]           = useState('')
   const [filter, setFilter]         = useState('')
   const [lastUpdate, setLastUpdate] = useState('')
+  // live prices from backend WebSocket: symbol → { price, change24h }
+  const [livePrices, setLivePrices] = useState<Record<string, { price: number; change24h: number }>>({})
+  const wsRef = useRef<WebSocket | null>(null)
   const cache = useRef<Record<number, Coin[]>>({})
 
   async function fetchPage(page: number, isRefresh = false) {
@@ -161,6 +177,49 @@ export default function CryptoPanel() {
     }, 60_000)
     return () => clearInterval(id)
   }, [load])
+
+  // Connect to backend WebSocket for real-time Binance price updates
+  useEffect(() => {
+    const wsBase = process.env.NEXT_PUBLIC_API_URL?.replace(/^http/, 'ws') ?? 'ws://localhost:8080'
+    let ws: WebSocket
+    let reconnectTimer: ReturnType<typeof setTimeout>
+
+    function connect() {
+      ws = new WebSocket(`${wsBase}/v1/stream/quotes`)
+      wsRef.current = ws
+
+      ws.onopen = () => {
+        const symbols = Array.from(BINANCE_SYMBOLS)
+        ws.send(JSON.stringify({ action: 'subscribe', symbols }))
+      }
+
+      ws.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data)
+          if (msg.type === 'quote' && msg.symbol && msg.price != null) {
+            setLivePrices(prev => ({
+              ...prev,
+              [msg.symbol]: { price: msg.price, change24h: msg.changePercent ?? 0 }
+            }))
+          }
+        } catch { /* ignore parse errors */ }
+      }
+
+      ws.onclose = () => {
+        reconnectTimer = setTimeout(connect, 5000)
+      }
+
+      ws.onerror = () => {
+        ws.close()
+      }
+    }
+
+    connect()
+    return () => {
+      clearTimeout(reconnectTimer)
+      ws?.close()
+    }
+  }, [])
 
   const allCoins = pages.flat()
   const filtered = filter.trim()
@@ -249,7 +308,9 @@ export default function CryptoPanel() {
           <div className="text-center py-8 text-slate-600 text-sm">No results for &ldquo;{filter}&rdquo;</div>
         )}
 
-        {!loading && filtered.map(coin => <CoinRow key={coin.id} coin={coin} />)}
+        {!loading && filtered.map(coin => (
+          <CoinRow key={coin.id} coin={coin} live={livePrices[toWsSymbol(coin.symbol)]} />
+        ))}
 
         {/* Load more */}
         {!loading && !filter && currentPage < 3 && (
