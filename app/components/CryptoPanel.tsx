@@ -48,9 +48,10 @@ function CoinRow({ coin, live }: { coin: Coin; live?: { price: number; change24h
 
   useEffect(() => {
     if (price === prevPriceRef.current) return
-    setFlash(price > prevPriceRef.current ? 'up' : 'dn')
+    const dir = price > prevPriceRef.current ? 'up' : 'dn'
     prevPriceRef.current = price
-    const t = setTimeout(() => setFlash(null), 600)
+    setFlash(dir)
+    const t = setTimeout(() => setFlash(null), 900)
     return () => clearTimeout(t)
   }, [price])
 
@@ -59,11 +60,21 @@ function CoinRow({ coin, live }: { coin: Coin; live?: { price: number; change24h
   const color = up ? 'text-green-400' : dn ? 'text-red-400' : 'text-slate-400'
   const sign  = change24h >= 0 ? '+' : ''
 
+  const priceColor = flash === 'up'
+    ? 'text-green-300'
+    : flash === 'dn'
+    ? 'text-red-300'
+    : color
+
   return (
     <Link
       href={`/ticker/${encodeURIComponent(coin.symbol + '-USD')}`}
-      className={`group flex items-center gap-3 px-4 py-2.5 transition-colors duration-300 border-b border-slate-800/60 last:border-0 ${
-        flash === 'up' ? 'bg-green-500/10' : flash === 'dn' ? 'bg-red-500/10' : 'hover:bg-slate-800/60'
+      className={`group flex items-center gap-3 px-4 py-2.5 transition-all duration-500 border-b border-slate-800/60 last:border-0 ${
+        flash === 'up'
+          ? 'bg-green-500/[0.18] border-l-2 border-l-green-500/60'
+          : flash === 'dn'
+          ? 'bg-red-500/[0.18] border-l-2 border-l-red-500/60'
+          : 'hover:bg-slate-800/60 border-l-2 border-l-transparent'
       }`}
     >
       {/* Rank */}
@@ -85,8 +96,10 @@ function CoinRow({ coin, live }: { coin: Coin; live?: { price: number; change24h
         <div className="text-[10px] text-slate-600 truncate">{coin.name}</div>
       </div>
 
-      {/* Price */}
-      <div className={`font-mono text-sm font-bold ${color} shrink-0`}>
+      {/* Price + tick arrow */}
+      <div className={`font-mono text-sm font-bold transition-colors duration-200 ${priceColor} shrink-0 flex items-center gap-1`}>
+        {flash === 'up' && <span className="text-green-400 text-[10px] leading-none">▲</span>}
+        {flash === 'dn' && <span className="text-red-400 text-[10px] leading-none">▼</span>}
         ${fmtPrice(price)}
       </div>
 
@@ -231,8 +244,16 @@ export default function CryptoPanel() {
     }
 
     connect()
+    // Ping every 25s to keep Railway's reverse proxy from closing the connection
+    const pingId = setInterval(() => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ action: 'ping' }))
+      }
+    }, 25_000)
+
     return () => {
       clearTimeout(reconnectTimer)
+      clearInterval(pingId)
       ws?.close()
     }
   }, [])

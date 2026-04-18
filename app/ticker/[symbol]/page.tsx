@@ -72,6 +72,7 @@ export default function TickerPage() {
   const [liveQuote, setLiveQuote] = useState<{ price: number; change: number; changePercent: number } | null>(null)
   const [priceFlash, setPriceFlash] = useState<'up' | 'dn' | null>(null)
   const [wsConnected, setWsConnected] = useState(false)
+  const [tickCount, setTickCount] = useState(0)
   const prevPriceRef = useRef<number | null>(null)
 
   async function fetchQuote(isRefresh = false) {
@@ -88,15 +89,24 @@ export default function TickerPage() {
 
       if (!quoteData) { setError(`No data found for "${symbol}"`); return }
 
-      // Fetch market cap from SEC EDGAR (free, no API key) using current price
       if (!quoteData.marketCap && quoteData.price > 0) {
-        try {
-          const statsRes = await fetch(
-            `/api/stats/${encodeURIComponent(symbol)}?price=${quoteData.price}`
-          )
-          const stats = await statsRes.json()
-          if (stats.marketCap) quoteData.marketCap = stats.marketCap
-        } catch {}
+        if (LIVE_CRYPTO.has(symbol)) {
+          // CoinGecko for crypto market cap
+          try {
+            const capRes = await fetch(`/api/crypto/cap/${encodeURIComponent(symbol)}`)
+            const cap = await capRes.json()
+            if (cap.marketCap) quoteData.marketCap = cap.marketCap
+          } catch {}
+        } else {
+          // SEC EDGAR for US equities
+          try {
+            const statsRes = await fetch(
+              `/api/stats/${encodeURIComponent(symbol)}?price=${quoteData.price}`
+            )
+            const stats = await statsRes.json()
+            if (stats.marketCap) quoteData.marketCap = stats.marketCap
+          } catch {}
+        }
       }
 
       setQuote(quoteData)
@@ -134,9 +144,10 @@ export default function TickerPage() {
             const newPrice = msg.price as number
             if (prevPriceRef.current !== null && newPrice !== prevPriceRef.current) {
               setPriceFlash(newPrice > prevPriceRef.current ? 'up' : 'dn')
-              setTimeout(() => setPriceFlash(null), 700)
+              setTimeout(() => setPriceFlash(null), 900)
             }
             prevPriceRef.current = newPrice
+            setTickCount(n => n + 1)
             setLiveQuote({ price: newPrice, change: msg.change ?? 0, changePercent: msg.changePercent ?? 0 })
           }
         } catch { /* ignore */ }
@@ -146,7 +157,11 @@ export default function TickerPage() {
     }
 
     connect()
-    return () => { clearTimeout(reconnectTimer); ws?.close() }
+    const pingId = setInterval(() => {
+      if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ action: 'ping' }))
+    }, 25_000)
+
+    return () => { clearTimeout(reconnectTimer); clearInterval(pingId); ws?.close() }
   }, [symbol])
 
   const displayPrice         = liveQuote?.price         ?? quote?.price         ?? 0
@@ -209,17 +224,26 @@ export default function TickerPage() {
               </div>
               <div className="text-right">
                 {wsConnected && (
-                  <div className="flex items-center justify-end gap-1 mb-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                    <span className="text-[10px] text-green-400 font-semibold tracking-wider">LIVE</span>
+                  <div className="flex items-center justify-end gap-2 mb-1">
+                    <span className="text-[10px] text-slate-600 font-mono">{tickCount} ticks</span>
+                    <span className="flex items-center gap-1 text-[10px] text-green-400 border border-green-500/30 bg-green-500/10 px-1.5 py-0.5 rounded-full">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                      LIVE
+                    </span>
                   </div>
                 )}
-                <div className={`font-mono font-bold text-3xl transition-colors duration-300 ${cls} ${
-                  priceFlash === 'up' ? 'text-green-300' : priceFlash === 'dn' ? 'text-red-300' : ''
+                <div className={`font-mono font-bold text-3xl transition-all duration-300 ${
+                  priceFlash === 'up' ? 'text-green-300' : priceFlash === 'dn' ? 'text-red-300' : cls
                 }`}>
-                  <span className={`inline-block transition-all duration-300 px-2 py-0.5 rounded-lg ${
-                    priceFlash === 'up' ? 'bg-green-500/20' : priceFlash === 'dn' ? 'bg-red-500/20' : ''
+                  <span className={`inline-block px-2 py-1 rounded-xl transition-all duration-300 ${
+                    priceFlash === 'up'
+                      ? 'bg-green-500/25 shadow-[0_0_20px_rgba(34,197,94,0.35)]'
+                      : priceFlash === 'dn'
+                      ? 'bg-red-500/25 shadow-[0_0_20px_rgba(239,68,68,0.35)]'
+                      : ''
                   }`}>
+                    {priceFlash === 'up' && <span className="text-green-400 text-lg mr-1">▲</span>}
+                    {priceFlash === 'dn' && <span className="text-red-400 text-lg mr-1">▼</span>}
                     {fmt(displayPrice)}
                   </span>
                   <span className="text-sm text-slate-600 ml-1">{quote.currency}</span>
