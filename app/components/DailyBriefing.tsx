@@ -21,7 +21,7 @@ interface Bucket {
 }
 
 function ageMs(iso: string | null): number {
-  if (!iso) return Infinity
+  if (!iso) return 6 * 60 * 60 * 1000  // treat unknown age as 6h (shows in "Earlier Today")
   return Date.now() - new Date(iso).getTime()
 }
 
@@ -47,7 +47,7 @@ function sentimentDot(s: string) {
   return null
 }
 
-const MAX_AGE_MS = 12 * 60 * 60 * 1000  // 12-hour hard cutoff
+const MAX_AGE_MS = 24 * 60 * 60 * 1000  // 24-hour hard cutoff
 
 function bucketize(items: NewsItem[]): Bucket[] {
   const breaking:  NewsItem[] = []
@@ -56,10 +56,10 @@ function bucketize(items: NewsItem[]): Bucket[] {
 
   for (const item of items) {
     const ms = ageMs(item.publishedAt)
-    if (ms > MAX_AGE_MS) continue            // drop anything older than 12h
+    if (ms > MAX_AGE_MS) continue            // drop anything older than 24h
     if (ms < 60 * 60 * 1000)      breaking.push(item)   // < 1h
     else if (ms < 4 * 60 * 60 * 1000) recent.push(item) // 1h – 4h
-    else                           earlier.push(item)   // 4h – 12h
+    else                           earlier.push(item)   // 4h – 24h
   }
 
   const buckets: Bucket[] = []
@@ -211,7 +211,7 @@ export default function DailyBriefing() {
       {/* No recent news */}
       {!loading && !error && buckets.length === 0 && (
         <div className="px-5 py-8 text-center">
-          <p className="text-slate-500 text-sm">No news in the last 12 hours.</p>
+          <p className="text-slate-500 text-sm">No news in the last 24 hours.</p>
           <p className="text-slate-700 text-xs mt-1">Feeds refresh every 10 minutes — check back when markets open.</p>
         </div>
       )}
