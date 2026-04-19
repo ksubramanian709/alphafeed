@@ -33,6 +33,9 @@ public class NewsService {
     @Value("${market-feed.alpha-vantage.api-key:}")
     private String alphaVantageKey;
 
+    @Value("${market-feed.brave.api-key:}")
+    private String braveApiKey;
+
     // ─── RSS source URLs ────────────────────────────────────────────────────────
 
     // Yahoo Finance RSS — company-specific (most reliable)
@@ -91,65 +94,50 @@ public class NewsService {
             java.util.regex.Pattern.CASE_INSENSITIVE
         );
 
+    // Brave News API — primary source (diverse: Reuters, Bloomberg, FT, WSJ, etc.)
+    private static final String BRAVE_NEWS_URL = "https://api.search.brave.com/res/v1/news/search";
+
     // Alpha Vantage news (used when API key is configured)
     private static final String AV_NEWS_URL = "https://www.alphavantage.co/query";
 
     // ─── Public API ─────────────────────────────────────────────────────────────
 
     /**
-     * General market news from multiple RSS sources. Cached 10 min.
-     * Hard cutoff: articles older than 12 hours are dropped.
+     * General market news — Brave News API primary, RSS fallback. Cached 10 min.
      */
     @Cacheable(value = "news", key = "'market_headlines'")
     public ApiResponse<List<NewsItem>> getMarketNews() {
         List<NewsItem> items = new ArrayList<>();
 
-        // Pull 6 items each from high-velocity financial feeds
-        items.addAll(fetchRss(CNBC_MARKETS_RSS,         "CNBC Markets",    6));
-        items.addAll(fetchRss(CNBC_FINANCE_RSS,         "CNBC Finance",    5));
-        items.addAll(fetchRss(CNBC_EARNINGS_RSS,        "CNBC Earnings",   4));
-        items.addAll(fetchRss(MARKETWATCH_RSS,          "MarketWatch",     6));
-        items.addAll(fetchRss(MARKETWATCH_ECONOMY_RSS,  "MarketWatch",     4));
-        items.addAll(fetchRss(YAHOO_FINANCE_RSS,        "Yahoo Finance",   6));
-        items.addAll(fetchRss(AP_FINANCE_RSS,           "AP Finance",      5));
-        items.addAll(fetchRss(AP_BUSINESS_RSS,          "AP Business",     4));
-        items.addAll(fetchRss(BARRONS_RSS,              "Barron's",        4));
-        items.addAll(fetchRss(SEEKING_ALPHA_MARKET_RSS, "Seeking Alpha",   5));
-        items.addAll(fetchRss(INVESTORS_BUSINESS_RSS,   "IBD",             4));
-        items.addAll(fetchRss(GOOGLE_BUSINESS_RSS,      "Google News",     6));
-        items.addAll(fetchRss(
-            String.format(GOOGLE_NEWS_RSS, "stock+market+economy+interest+rates"), "Google News", 5));
+        // Primary: Brave News API — diverse publishers (Reuters, Bloomberg, FT, WSJ, AP, CNBC…)
+        items.addAll(fetchBraveNews("stock market financial news economy fed interest rates", 20));
+        items.addAll(fetchBraveNews("earnings results markets today wall street", 10));
 
-        // Supplement with Alpha Vantage if key configured
+        // RSS fallback — reliable public feeds
+        items.addAll(fetchRss(AP_FINANCE_RSS,    "AP Finance",   6));
+        items.addAll(fetchRss(AP_BUSINESS_RSS,   "AP Business",  4));
+        items.addAll(fetchRss(MARKETWATCH_RSS,   "MarketWatch",  6));
+        items.addAll(fetchRss(YAHOO_FINANCE_RSS, "Yahoo Finance",6));
+        items.addAll(fetchRss(CNBC_MARKETS_RSS,  "CNBC",         5));
+        items.addAll(fetchRss(CNBC_FINANCE_RSS,  "CNBC",         4));
+
+        // Alpha Vantage supplement
         if (alphaVantageKey != null && !alphaVantageKey.isBlank()) {
             items.addAll(fetchAlphaVantageNews(null, "financial_markets,economy_macro", 10));
         }
 
-        // Hard 12-hour cutoff — no stale news
-        Instant cutoff12h = Instant.now().minus(12, java.time.temporal.ChronoUnit.HOURS);
-        // Fallback: if genuinely sparse (e.g. pre-market on a Sunday) allow up to 24h
         Instant cutoff24h = Instant.now().minus(24, java.time.temporal.ChronoUnit.HOURS);
-
-        List<NewsItem> all = deduplicate(items).stream()
+        List<NewsItem> result = deduplicate(items).stream()
                 .filter(item -> isFinanciallyRelevant(item.getTitle()))
-                .filter(item -> item.getPublishedAt() == null
-                             || item.getPublishedAt().isAfter(cutoff24h))  // drop anything >24h
+                .filter(item -> item.getPublishedAt() == null || item.getPublishedAt().isAfter(cutoff24h))
                 .sorted(Comparator.comparing(NewsItem::getPublishedAt,
                         Comparator.nullsLast(Comparator.reverseOrder())))
+                .limit(40)
                 .collect(Collectors.toList());
-
-        // Primary: last 12 hours. Fallback to 24h only if truly nothing recent.
-        List<NewsItem> fresh12h = all.stream()
-                .filter(i -> i.getPublishedAt() != null && i.getPublishedAt().isAfter(cutoff12h))
-                .limit(50)
-                .collect(Collectors.toList());
-
-        List<NewsItem> result = fresh12h.size() >= 5 ? fresh12h
-                : all.stream().limit(30).collect(Collectors.toList());
 
         return result.isEmpty()
             ? ApiResponse.error("No news available")
-            : ApiResponse.success(result, "rss_aggregated");
+            : ApiResponse.success(result, "news_aggregated");
     }
 
     /** Returns true if the title contains at least one financial/market/geopolitics keyword. */
@@ -159,37 +147,120 @@ public class NewsService {
     }
 
     /**
-     * News for a specific ticker from multiple sources. Cached 15 min.
+     * Ticker-specific news — Brave primary (query by symbol + company name), RSS supplement.
+     * Cached 15 min.
      */
     @Cacheable(value = "news", key = "#symbol.toUpperCase()")
     public ApiResponse<List<NewsItem>> getTickerNews(String symbol) {
         String sym = symbol.toUpperCase();
         List<NewsItem> items = new ArrayList<>();
 
-        // Yahoo Finance RSS — most targeted for a ticker
-        items.addAll(fetchRss(String.format(YAHOO_RSS, sym), "Yahoo Finance"));
+        // Primary: Brave News API — searches across Reuters, Bloomberg, FT, WSJ, CNBC, etc.
+        items.addAll(fetchBraveNews(sym + " stock earnings results", 15));
+        items.addAll(fetchBraveNews(sym + " company news analysis", 8));
 
-        // Seeking Alpha RSS
-        items.addAll(fetchRss(String.format(SEEKING_ALPHA_RSS, sym), "Seeking Alpha"));
+        // Yahoo Finance RSS — ticker-specific, very reliable
+        items.addAll(fetchRss(String.format(YAHOO_RSS, sym), "Yahoo Finance", 8));
 
-        // Google News search — catches news from across the web
-        items.addAll(fetchRss(
-            String.format(GOOGLE_NEWS_RSS, sym), "Google News"));
+        // Google News — broad coverage
+        items.addAll(fetchRss(String.format(GOOGLE_NEWS_RSS, sym), "Google News", 8));
 
-        // Alpha Vantage if key configured
+        // Alpha Vantage with sentiment scoring
         if (alphaVantageKey != null && !alphaVantageKey.isBlank()) {
             items.addAll(fetchAlphaVantageNews(sym, null, 10));
         }
 
-        List<NewsItem> deduplicated = deduplicate(items).stream()
+        Instant cutoff48h = Instant.now().minus(48, java.time.temporal.ChronoUnit.HOURS);
+        List<NewsItem> result = deduplicate(items).stream()
+                .filter(item -> item.getPublishedAt() == null || item.getPublishedAt().isAfter(cutoff48h))
                 .sorted(Comparator.comparing(NewsItem::getPublishedAt,
                         Comparator.nullsLast(Comparator.reverseOrder())))
-                .limit(15)
+                .limit(20)
                 .collect(Collectors.toList());
 
-        return deduplicated.isEmpty()
+        return result.isEmpty()
             ? ApiResponse.error("No news found for " + sym)
-            : ApiResponse.success(deduplicated, "rss_aggregated");
+            : ApiResponse.success(result, "news_aggregated");
+    }
+
+    // ─── Brave News API ──────────────────────────────────────────────────────────
+
+    private List<NewsItem> fetchBraveNews(String query, int count) {
+        if (braveApiKey == null || braveApiKey.isBlank()) return Collections.emptyList();
+        try {
+            String url = UriComponentsBuilder.fromHttpUrl(BRAVE_NEWS_URL)
+                    .queryParam("q", query)
+                    .queryParam("count", Math.min(count, 20))
+                    .queryParam("search_lang", "en")
+                    .queryParam("country", "us")
+                    .queryParam("freshness", "pd") // past day
+                    .toUriString();
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-Subscription-Token", braveApiKey);
+            headers.set(HttpHeaders.ACCEPT, "application/json");
+
+            ResponseEntity<BraveNewsResponse> resp = restTemplate.exchange(
+                    url, HttpMethod.GET, new HttpEntity<>(headers), BraveNewsResponse.class);
+
+            if (resp.getBody() == null || resp.getBody().getResults() == null)
+                return Collections.emptyList();
+
+            return resp.getBody().getResults().stream()
+                    .map(r -> NewsItem.builder()
+                            .title(r.getTitle())
+                            .url(r.getUrl())
+                            .source(r.getSource() != null ? r.getSource().getName() : "News")
+                            .summary(r.getDescription())
+                            .publishedAt(parseBraveAge(r.getAge()))
+                            .sentiment("Neutral")
+                            .imageUrl(r.getThumbnail() != null ? r.getThumbnail().getSrc() : null)
+                            .build())
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.debug("Brave news failed [{}]: {}", query, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    /** Converts Brave's human-readable age ("2 hours ago") to an Instant. */
+    private Instant parseBraveAge(String age) {
+        if (age == null || age.isBlank()) return Instant.now();
+        java.util.regex.Matcher m =
+            java.util.regex.Pattern.compile("(\\d+)\\s+(second|minute|hour|day|week)")
+                .matcher(age.toLowerCase());
+        if (!m.find()) return Instant.now();
+        long val = Long.parseLong(m.group(1));
+        long millis = switch (m.group(2)) {
+            case "second" -> val * 1_000L;
+            case "minute" -> val * 60_000L;
+            case "hour"   -> val * 3_600_000L;
+            case "day"    -> val * 86_400_000L;
+            case "week"   -> val * 604_800_000L;
+            default       -> 0L;
+        };
+        return Instant.now().minusMillis(millis);
+    }
+
+    @Data @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class BraveNewsResponse {
+        private List<BraveArticle> results;
+
+        @Data @JsonIgnoreProperties(ignoreUnknown = true)
+        public static class BraveArticle {
+            private String title;
+            private String url;
+            private String description;
+            private String age;
+            private BraveSource source;
+            private BraveThumbnail thumbnail;
+        }
+
+        @Data @JsonIgnoreProperties(ignoreUnknown = true)
+        public static class BraveSource { private String name; }
+
+        @Data @JsonIgnoreProperties(ignoreUnknown = true)
+        public static class BraveThumbnail { private String src; }
     }
 
     // ─── RSS fetching & parsing ──────────────────────────────────────────────────
