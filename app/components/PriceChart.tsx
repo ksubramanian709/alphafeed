@@ -30,6 +30,7 @@ const RANGES = [
   { label: 'YTD', interval: '1d',  range: 'ytd' },
   { label: '1Y',  interval: '1d',  range: '1y'  },
   { label: '5Y',  interval: '1wk', range: '5y'  },
+  { label: 'ALL', interval: '1mo', range: 'max' },
 ]
 
 // ── Tick label on the X-axis (short, no clutter) ──────────────────────────────
@@ -46,6 +47,11 @@ function xAxisTick(epoch: number, interval: string, range: string): string {
     const day  = d.toLocaleDateString('en-US', { weekday: 'short' })
     const time = d.toLocaleTimeString('en-US', { hour: 'numeric', hour12: true })
     return `${day} ${time}`
+  }
+
+  if (range === 'max') {
+    // ALL: just the year "2015"
+    return d.getFullYear().toString()
   }
 
   if (interval === '1wk' || range === '5y') {
@@ -81,7 +87,7 @@ function tickInterval(dataLen: number, range: string): number | 'preserveStartEn
   if (dataLen === 0) return 'preserveStartEnd'
   const targets: Record<string, number> = {
     '1d': 6, '5d': 5, '1mo': 6, '3mo': 6,
-    '6mo': 6, 'ytd': 6, '1y': 6, '5y': 8,
+    '6mo': 6, 'ytd': 6, '1y': 6, '5y': 8, 'max': 10,
   }
   const target = targets[range] ?? 6
   return Math.max(1, Math.floor(dataLen / target))
