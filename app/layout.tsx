@@ -19,40 +19,38 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/" className="flex items-center gap-2 group">
                 <svg width="20" height="16" viewBox="0 0 42 32" fill="none" aria-hidden="true">
                   <polyline points="3,22 11,16 19,18 27,9 35,5"
-                    stroke="#818cf8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                  <circle cx="35" cy="5" r="3" fill="#818cf8" />
+                    stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                  <circle cx="35" cy="5" r="3" fill="#22c55e" />
                 </svg>
                 <span className="font-bold text-sm tracking-tight">
-                  <span className="text-indigo-400">Alpha</span>
+                  <span className="text-emerald-400">Alpha</span>
                   <span className="text-slate-100">Feed</span>
                 </span>
-                <span className="hidden sm:flex items-center gap-1 bg-indigo-500/10 border border-indigo-500/20 rounded-full px-2 py-0.5 text-[9px] font-semibold text-indigo-400 tracking-widest uppercase">
-                  <span className="w-1 h-1 rounded-full bg-indigo-400 animate-pulse" />
-                  AI
+                <span className="hidden sm:flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2 py-0.5 text-[9px] font-semibold text-emerald-500 tracking-widest uppercase">
+                  <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
+                  Live
                 </span>
               </Link>
 
               <div className="flex items-center gap-5">
                 <Link href="/" className="text-xs text-slate-500 hover:text-slate-200 transition-colors">
-                  Research
-                </Link>
-                <Link href="/markets" className="text-xs text-slate-500 hover:text-slate-200 transition-colors">
-                  Markets
+                  Dashboard
                 </Link>
                 <Link href="/screener" className="text-xs text-slate-500 hover:text-slate-200 transition-colors">
                   Screener
                 </Link>
-                <Link href="/earnings" className="text-xs text-slate-500 hover:text-slate-200 transition-colors">
-                  Earnings
+                <Link href="/research" className="text-xs text-slate-500 hover:text-emerald-400 transition-colors flex items-center gap-1">
+                  <span className="w-1 h-1 rounded-full bg-emerald-500" />
+                  Research
                 </Link>
               </div>
             </div>
 
             {/* Right: data sources badge */}
             <div className="hidden md:flex items-center gap-1.5 text-[10px] text-slate-600">
-              <span>SEC EDGAR</span>
+              <span>Yahoo Finance</span>
               <span className="text-slate-800">·</span>
-              <span>Claude AI</span>
+              <span>Alpha Vantage</span>
               <span className="text-slate-800">·</span>
               <span>FRED</span>
             </div>

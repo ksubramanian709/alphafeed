@@ -29,6 +29,24 @@ interface EarningsItem {
   revenueActual: number; revenueEstimate: number
 }
 
+interface AnnualSnapshot {
+  fiscalYear: string; filingDate: string
+  revenue: number | null; grossProfit: number | null
+  operatingIncome: number | null; netIncome: number | null
+  researchAndDevelopment: number | null; capex: number | null
+  cashAndEquivalents: number | null; longTermDebt: number | null
+  totalAssets: number | null; epsBasic: number | null
+  grossMarginPct: number | null; operatingMarginPct: number | null; netMarginPct: number | null
+}
+
+interface FinancialTimeseries {
+  symbol: string; companyName: string
+  annual: AnnualSnapshot[]
+  grossMarginPct: number | null; operatingMarginPct: number | null; netMarginPct: number | null
+  revenueGrowthYoy: number | null; epsGrowthYoy: number | null
+  error?: string
+}
+
 interface FilingInfo {
   filingDate: string; form: string; secUrl: string; accessionNumber: string
 }
@@ -390,6 +408,138 @@ function EarningsTab({ symbol }: { symbol: string }) {
   )
 }
 
+function FinancialsTab({ fin, loading }: { fin: FinancialTimeseries | null; loading: boolean }) {
+  if (loading) return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-4 gap-3">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-20" />)}</div>
+      <Skeleton className="h-64 w-full" />
+    </div>
+  )
+  if (!fin) return null
+  if (fin.error) return (
+    <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-6 text-rose-400 text-sm">{fin.error}</div>
+  )
+
+  function fmtB(n: number | null) {
+    if (n == null) return '—'
+    const abs = Math.abs(n)
+    const sign = n < 0 ? '-' : ''
+    if (abs >= 1e12) return `${sign}$${(abs / 1e12).toFixed(2)}T`
+    if (abs >= 1e9)  return `${sign}$${(abs / 1e9).toFixed(1)}B`
+    if (abs >= 1e6)  return `${sign}$${(abs / 1e6).toFixed(0)}M`
+    return `${sign}$${abs.toLocaleString()}`
+  }
+  function fmtPct(n: number | null) {
+    if (n == null) return '—'
+    return `${n >= 0 ? '' : ''}${n.toFixed(1)}%`
+  }
+  function fmtEps(n: number | null) {
+    if (n == null) return '—'
+    return `$${n.toFixed(2)}`
+  }
+  function growthColor(n: number | null) {
+    if (n == null) return 'text-slate-500'
+    return n >= 0 ? 'text-emerald-400' : 'text-rose-400'
+  }
+  function yoy(current: number | null, prior: number | null) {
+    if (current == null || prior == null || prior === 0) return null
+    return 100 * (current - prior) / Math.abs(prior)
+  }
+
+  const annual = fin.annual ?? []
+  const latest = annual[0]
+  const prior  = annual[1]
+
+  // Top metric cards
+  const topMetrics = [
+    { label: 'Revenue Growth (YoY)', value: fin.revenueGrowthYoy != null ? `${fin.revenueGrowthYoy >= 0 ? '+' : ''}${fin.revenueGrowthYoy.toFixed(1)}%` : '—', color: growthColor(fin.revenueGrowthYoy) },
+    { label: 'Gross Margin', value: fmtPct(fin.grossMarginPct), color: 'text-emerald-400' },
+    { label: 'Operating Margin', value: fmtPct(fin.operatingMarginPct), color: fin.operatingMarginPct != null && fin.operatingMarginPct < 0 ? 'text-rose-400' : 'text-sky-400' },
+    { label: 'Net Margin', value: fmtPct(fin.netMarginPct), color: fin.netMarginPct != null && fin.netMarginPct < 0 ? 'text-rose-400' : 'text-violet-400' },
+    { label: 'EPS Growth (YoY)', value: fin.epsGrowthYoy != null ? `${fin.epsGrowthYoy >= 0 ? '+' : ''}${fin.epsGrowthYoy.toFixed(1)}%` : '—', color: growthColor(fin.epsGrowthYoy) },
+    { label: 'Cash & Equivalents', value: fmtB(latest?.cashAndEquivalents ?? null), color: 'text-slate-200' },
+    { label: 'Long-Term Debt', value: fmtB(latest?.longTermDebt ?? null), color: 'text-slate-200' },
+    { label: 'R&D Spend', value: fmtB(latest?.researchAndDevelopment ?? null), color: 'text-slate-200' },
+  ]
+
+  const cols = ['Revenue', 'Gross Profit', 'Op. Income', 'Net Income', 'EPS', 'Cash', 'Debt', 'R&D', 'CapEx']
+
+  return (
+    <div className="space-y-5">
+      {/* Metric cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {topMetrics.slice(0, 8).map(m => (
+          <div key={m.label} className="rounded-xl border border-slate-800 bg-slate-900/60 p-3.5">
+            <div className={`text-xl font-bold font-mono ${m.color}`}>{m.value}</div>
+            <div className="text-[10px] uppercase tracking-widest text-slate-500 mt-1">{m.label}</div>
+            <div className="text-[10px] text-slate-700 mt-0.5">
+              {m.label.includes('Margin') || m.label.includes('Growth') ? `Latest fiscal year` : `FY${latest?.fiscalYear ?? ''}`}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Annual financials table */}
+      <div className="rounded-2xl border border-slate-800 overflow-x-auto">
+        <div className="min-w-[1050px]">
+          {/* Header */}
+          <div className="grid bg-slate-900/80 px-4 py-2.5 border-b border-slate-800"
+            style={{ gridTemplateColumns: '80px repeat(9, 1fr)' }}>
+            <span className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">FY</span>
+            {cols.map(c => (
+              <span key={c} className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold text-right">{c}</span>
+            ))}
+          </div>
+
+          {annual.map((row, i) => {
+            const prev = annual[i + 1]
+            const revG = yoy(row.revenue, prev?.revenue ?? null)
+            return (
+              <div key={row.fiscalYear}
+                className="grid px-4 py-3 border-b border-slate-800/60 last:border-0 hover:bg-slate-800/20 transition-colors"
+                style={{ gridTemplateColumns: '80px repeat(9, 1fr)' }}>
+                <div>
+                  <span className="text-xs font-mono text-slate-200 font-semibold">FY{row.fiscalYear}</span>
+                  {revG != null && (
+                    <div className={`text-[9px] font-mono ${revG >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                      {revG >= 0 ? '▲' : '▼'}{Math.abs(revG).toFixed(1)}%
+                    </div>
+                  )}
+                </div>
+                <span className="text-xs font-mono text-slate-300 text-right">{fmtB(row.revenue)}</span>
+                <span className="text-xs font-mono text-slate-400 text-right">
+                  {fmtB(row.grossProfit)}
+                  {row.grossMarginPct != null && (
+                    <span className="text-[9px] text-emerald-600 ml-1">({row.grossMarginPct.toFixed(0)}%)</span>
+                  )}
+                </span>
+                <span className={`text-xs font-mono text-right ${row.operatingIncome != null && row.operatingIncome < 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+                  {fmtB(row.operatingIncome)}
+                  {row.operatingMarginPct != null && (
+                    <span className="text-[9px] text-sky-600 ml-1">({row.operatingMarginPct.toFixed(0)}%)</span>
+                  )}
+                </span>
+                <span className={`text-xs font-mono text-right ${row.netIncome != null && row.netIncome < 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+                  {fmtB(row.netIncome)}
+                </span>
+                <span className="text-xs font-mono text-slate-400 text-right">{fmtEps(row.epsBasic)}</span>
+                <span className="text-xs font-mono text-slate-500 text-right">{fmtB(row.cashAndEquivalents)}</span>
+                <span className="text-xs font-mono text-slate-500 text-right">{fmtB(row.longTermDebt)}</span>
+                <span className="text-xs font-mono text-slate-500 text-right">{fmtB(row.researchAndDevelopment)}</span>
+                <span className="text-xs font-mono text-slate-500 text-right">{fmtB(row.capex)}</span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="text-[10px] text-slate-700 text-center">
+        Source: SEC EDGAR XBRL · Annual 10-K filings · Figures in USD
+      </div>
+    </div>
+  )
+}
+
 function FilingsTab({ symbol }: { symbol: string }) {
   const [filings, setFilings] = useState<FilingInfo[]>([])
   const [loading, setLoading] = useState(true)
@@ -448,7 +598,7 @@ function FilingsTab({ symbol }: { symbol: string }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-const TABS = ['10-K Analysis', 'Earnings', 'Year-over-Year', 'All Filings'] as const
+const TABS = ['Financials', '10-K Analysis', 'Earnings', 'Year-over-Year', 'All Filings'] as const
 type Tab = typeof TABS[number]
 
 export default function ResearchPage() {
@@ -458,11 +608,13 @@ export default function ResearchPage() {
 
   const [quote, setQuote]       = useState<Quote | null>(null)
   const [quoteLoading, setQL]   = useState(true)
-  const [tab, setTab]           = useState<Tab>('10-K Analysis')
-  const [analysis, setAnalysis] = useState<ResearchAnalysis | null>(null)
+  const [tab, setTab]            = useState<Tab>('Financials')
+  const [analysis, setAnalysis]  = useState<ResearchAnalysis | null>(null)
   const [analysisLoading, setAL] = useState(false)
-  const [compare, setCompare]   = useState<YoyComparison | null>(null)
-  const [compareLoading, setCL] = useState(false)
+  const [compare, setCompare]    = useState<YoyComparison | null>(null)
+  const [compareLoading, setCL]  = useState(false)
+  const [financials, setFin]     = useState<FinancialTimeseries | null>(null)
+  const [finLoading, setFL]      = useState(false)
 
   // Quote (fast)
   useEffect(() => {
@@ -493,6 +645,17 @@ export default function ResearchPage() {
       .then(d => setCompare(d.data))
       .catch(() => {})
       .finally(() => setCL(false))
+  }, [tab, symbol])
+
+  // Financials via XBRL (fetched on demand, fast after first load)
+  useEffect(() => {
+    if (tab !== 'Financials' || financials) return
+    setFL(true)
+    fetch(`/api/research/${symbol}/financials`)
+      .then(r => r.json())
+      .then(d => setFin(d.data))
+      .catch(() => {})
+      .finally(() => setFL(false))
   }, [tab, symbol])
 
   const up   = (quote?.changePercent ?? 0) >= 0
@@ -562,6 +725,18 @@ export default function ResearchPage() {
 
       {/* ── Tab content ─────────────────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-4 py-6">
+
+        {tab === 'Financials' && (
+          <>
+            {finLoading && (
+              <div className="flex items-center gap-3 mb-5 text-sm text-slate-400">
+                <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                Loading XBRL financial data from SEC EDGAR…
+              </div>
+            )}
+            <FinancialsTab fin={financials} loading={finLoading} />
+          </>
+        )}
 
         {tab === '10-K Analysis' && (
           <>
