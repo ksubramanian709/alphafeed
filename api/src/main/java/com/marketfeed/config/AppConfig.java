@@ -44,7 +44,9 @@ public class AppConfig {
 
         RequestConfig requestConfig = RequestConfig.custom()
                 .setConnectTimeout(Timeout.ofSeconds(8))
-                .setResponseTimeout(Timeout.ofSeconds(15))
+                // Claude API calls (insights, sentiment scoring) can take up to 30s on a slow response.
+                // Market-data fetches are always <5s so this ceiling is safe for all routes.
+                .setResponseTimeout(Timeout.ofSeconds(45))
                 .build();
 
         CloseableHttpClient httpClient = HttpClients.custom()

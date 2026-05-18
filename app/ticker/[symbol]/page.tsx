@@ -7,6 +7,7 @@ import OptionsChain from '../../components/OptionsChain'
 import EarningsDropdown from '../../components/EarningsDropdown'
 import FundamentalsPanel from '../../components/FundamentalsPanel'
 import AIInsights from '../../components/AIInsights'
+import SentimentChart from '../../components/SentimentChart'
 
 const API = process.env.NEXT_PUBLIC_API_URL
 
@@ -325,6 +326,11 @@ export default function TickerPage() {
             </h2>
             <PriceChart symbol={quote.symbol} />
           </div>
+
+          {/* ── WSB Sentiment — equities & ETFs only ── */}
+          {(quote.assetType === 'EQUITY' || quote.assetType === 'ETF') && (
+            <SentimentChart symbol={quote.symbol} />
+          )}
 
           {/* ── AI Insights — all asset types ── */}
           <AIInsights symbol={quote.symbol} assetType={quote.assetType} />

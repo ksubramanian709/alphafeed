@@ -1,8 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
 
-const API = process.env.NEXT_PUBLIC_API_URL
-
 interface Insight {
   symbol: string
   sentiment: 'bullish' | 'bearish' | 'neutral'
@@ -52,7 +50,7 @@ export default function AIInsights({ symbol, assetType = 'EQUITY' }: { symbol: s
     setLoading(true)
     setError(null)
     try {
-      const r = await fetch(`${API}/v1/agent/insights/${encodeURIComponent(symbol)}?assetType=${encodeURIComponent(assetType)}`)
+      const r = await fetch(`/api/agent/insights/${encodeURIComponent(symbol)}?assetType=${encodeURIComponent(assetType)}`)
       if (r.status === 429) { setError('Rate limit reached — try again in an hour.'); return }
       if (!r.ok)            { setError('Analysis temporarily unavailable.'); return }
       const d: Insight = await r.json()
