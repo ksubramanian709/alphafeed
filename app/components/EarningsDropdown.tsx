@@ -1,7 +1,7 @@
 'use client'
+import { BACKEND } from '@/lib/backend'
 import { useState } from 'react'
 
-const API = process.env.NEXT_PUBLIC_API_URL
 
 interface QuarterlyEarning {
   fiscalDateEnding: string
@@ -51,7 +51,7 @@ export default function EarningsDropdown({ symbol }: { symbol: string }) {
     if (!open && !data) {
       setLoading(true)
       try {
-        const res  = await fetch(`${API}/v1/earnings/${symbol}`)
+        const res  = await fetch(`${BACKEND}/v1/earnings/${symbol}`)
         const json = await res.json()
         setData(json)
       } catch {

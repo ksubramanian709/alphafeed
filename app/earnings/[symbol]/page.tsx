@@ -1,10 +1,10 @@
 'use client'
+import { BACKEND } from '@/lib/backend'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import PriceChart from '../../components/PriceChart'
 
-const API = process.env.NEXT_PUBLIC_API_URL
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -92,7 +92,7 @@ function AiPanel({ symbol }: { symbol: string }) {
   async function load() {
     setStatus('loading')
     try {
-      const res = await fetch(`${API}/v1/agent/insights/${encodeURIComponent(symbol)}?assetType=EQUITY`)
+      const res = await fetch(`${BACKEND}/v1/agent/insights/${encodeURIComponent(symbol)}?assetType=EQUITY`)
       const json = await res.json()
       if (json.error) { setStatus('error'); return }
       const t = json.earningsSummary || json.summary || json.keyThesis || json.analysis || null
@@ -249,8 +249,8 @@ export default function EarningsSymbolPage() {
   useEffect(() => {
     async function load() {
       const [quoteRes, weekRes] = await Promise.allSettled([
-        fetch(`${API}/v1/quote/${sym}`).then(r => r.json()),
-        fetch(`${API}/v1/earnings/week`).then(r => r.json()),
+        fetch(`${BACKEND}/v1/quote/${sym}`).then(r => r.json()),
+        fetch(`${BACKEND}/v1/earnings/week`).then(r => r.json()),
       ])
 
       if (quoteRes.status === 'fulfilled' && quoteRes.value?.data) {
@@ -265,7 +265,7 @@ export default function EarningsSymbolPage() {
 
     async function loadHistory() {
       try {
-        const res  = await fetch(`${API}/v1/earnings/${sym}`)
+        const res  = await fetch(`${BACKEND}/v1/earnings/${sym}`)
         const json = await res.json()
         if (json.error) { setHistError(json.error); return }
         setHistory((json.quarterlyEarnings ?? []).slice(0, 8))

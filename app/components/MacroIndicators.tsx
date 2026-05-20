@@ -1,7 +1,7 @@
 'use client'
+import { BACKEND } from '@/lib/backend'
 import { useEffect, useState } from 'react'
 
-const API = process.env.NEXT_PUBLIC_API_URL
 
 interface Indicator {
   seriesId: string
@@ -33,7 +33,7 @@ export default function MacroIndicators() {
 
   async function load() {
     try {
-      const res = await fetch(`${API}/v1/economic`)
+      const res = await fetch(`${BACKEND}/v1/economic`)
       const json = await res.json()
       if (json.error) {
         setError(json.error)

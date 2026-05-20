@@ -1,8 +1,8 @@
 'use client'
+import { BACKEND } from '@/lib/backend'
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 
-const API = process.env.NEXT_PUBLIC_API_URL
 
 interface Stock {
   symbol: string
@@ -89,7 +89,7 @@ export default function ScreenerPage() {
   const [query, setQuery]       = useState('')
 
   useEffect(() => {
-    fetch(`${API}/v1/screener/sectors`).then(r => r.json()).then(setSectors).catch(() => {})
+    fetch(`${BACKEND}/v1/screener/sectors`).then(r => r.json()).then(setSectors).catch(() => {})
   }, [])
 
   const runScreen = useCallback(async (f: Filters = filters, sb = sortBy, sd = sortDesc) => {
@@ -107,7 +107,7 @@ export default function ScreenerPage() {
       if (f.maxBeta)       p.set('maxBeta',       f.maxBeta)
       p.set('sortBy',   sb)
       p.set('sortDesc', String(sd))
-      const res  = await fetch(`${API}/v1/screener?${p}`)
+      const res  = await fetch(`${BACKEND}/v1/screener?${p}`)
       const json = await res.json()
       setResults(json)
       setTotal(json.length)

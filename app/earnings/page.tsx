@@ -1,9 +1,9 @@
 'use client'
+import { BACKEND } from '@/lib/backend'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import EarningsCalendar from '../components/EarningsCalendar'
 
-const API = process.env.NEXT_PUBLIC_API_URL
 
 interface QuarterlyEarning {
   fiscalDateEnding: string
@@ -106,7 +106,7 @@ function HistoryPanel({ symbol }: { symbol: string }) {
   async function load() {
     setState(s => ({ ...s, status: 'loading' }))
     try {
-      const res  = await fetch(`${API}/v1/earnings/${encodeURIComponent(symbol)}`)
+      const res  = await fetch(`${BACKEND}/v1/earnings/${encodeURIComponent(symbol)}`)
       const json = await res.json()
       const quarters: QuarterlyEarning[] = (json.quarterlyEarnings ?? []).slice(0, 4)
       const surprises = quarters.map(q => q.surprisePercentage).filter((x): x is number => x != null)
@@ -362,7 +362,7 @@ export default function EarningsPage() {
 
   async function load() {
     try {
-      const res  = await fetch(`${API}/v1/earnings/calendar`)
+      const res  = await fetch(`${BACKEND}/v1/earnings/calendar`)
       const json = await res.json()
       if (Array.isArray(json)) {
         setSetups(json)

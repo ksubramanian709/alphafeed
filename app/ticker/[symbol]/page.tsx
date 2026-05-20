@@ -1,4 +1,5 @@
 'use client'
+import { BACKEND } from '@/lib/backend'
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import PriceChart from '../../components/PriceChart'
@@ -8,7 +9,6 @@ import EarningsDropdown from '../../components/EarningsDropdown'
 import FundamentalsPanel from '../../components/FundamentalsPanel'
 import AIInsights from '../../components/AIInsights'
 
-const API = process.env.NEXT_PUBLIC_API_URL
 
 const LIVE_CRYPTO = new Set([
   'BTC-USD','ETH-USD','SOL-USD','XRP-USD','BNB-USD',
@@ -79,7 +79,7 @@ export default function TickerPage() {
     if (!isRefresh) setLoading(true)
     try {
       // Fetch quote first so we have the price for market cap calculation
-      const quoteRes = await fetch(`${API}/v1/quote/${symbol}`).catch(() => null)
+      const quoteRes = await fetch(`${BACKEND}/v1/quote/${symbol}`).catch(() => null)
 
       let quoteData: Quote | null = null
       if (quoteRes) {

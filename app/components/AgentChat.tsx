@@ -1,7 +1,7 @@
 'use client'
+import { BACKEND } from '@/lib/backend'
 import { useEffect, useRef, useState } from 'react'
 
-const API = process.env.NEXT_PUBLIC_API_URL
 
 const FALLBACK_SUGGESTIONS = [
   'What is the yield curve telling us right now?',
@@ -80,7 +80,7 @@ export default function AgentChat() {
 
   // Fetch today's AI-generated suggestions on mount
   useEffect(() => {
-    fetch(`${API}/v1/agent/suggestions`)
+    fetch(`${BACKEND}/v1/agent/suggestions`)
       .then(r => r.json())
       .then((data: string[]) => {
         setSuggestions(Array.isArray(data) && data.length > 0 ? data : FALLBACK_SUGGESTIONS)
@@ -111,7 +111,7 @@ export default function AgentChat() {
     if (inputRef.current) inputRef.current.style.height = 'auto'
 
     try {
-      const res = await fetch(`${API}/v1/agent/query`, {
+      const res = await fetch(`${BACKEND}/v1/agent/query`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

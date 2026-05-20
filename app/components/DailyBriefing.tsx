@@ -1,7 +1,7 @@
 'use client'
+import { BACKEND } from '@/lib/backend'
 import { useEffect, useState, useCallback } from 'react'
 
-const API = process.env.NEXT_PUBLIC_API_URL
 
 interface NewsItem {
   title: string
@@ -127,7 +127,7 @@ export default function DailyBriefing() {
 
   const load = useCallback(async () => {
     try {
-      const res  = await fetch(`${API}/v1/news`)
+      const res  = await fetch(`${BACKEND}/v1/news`)
       const json = await res.json()
       if (json.error) { setError(json.error); return }
       const items: NewsItem[] = json.data ?? []

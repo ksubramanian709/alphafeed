@@ -1,8 +1,8 @@
 'use client'
+import { BACKEND } from '@/lib/backend'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-const API = process.env.NEXT_PUBLIC_API_URL
 
 interface CalendarItem {
   symbol: string
@@ -105,7 +105,7 @@ export default function EarningsCalendar() {
   const [showAll, setShowAll]       = useState(true)
 
   useEffect(() => {
-    fetch(`${API}/v1/earnings/calendar`)
+    fetch(`${BACKEND}/v1/earnings/calendar`)
       .then(r => { if (!r.ok) throw new Error(); return r.json() })
       .then((d: CalendarItem[]) => setItems(Array.isArray(d) ? d : []))
       .catch(() => setItems([]))

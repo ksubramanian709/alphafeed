@@ -1,8 +1,8 @@
 'use client'
+import { BACKEND } from '@/lib/backend'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
-const API = process.env.NEXT_PUBLIC_API_URL
 
 const SECTOR_META: Record<string, { label: string; icon: string; accent: string }> = {
   energy:        { label: 'Energy',          icon: '⚡', accent: 'text-orange-400' },
@@ -158,7 +158,7 @@ export default function CommodityDashboard() {
 
   async function load() {
     try {
-      const res  = await fetch(`${API}/v1/commodities/futures`)
+      const res  = await fetch(`${BACKEND}/v1/commodities/futures`)
       const json = await res.json()
       setData(json.data)
       setLastUpdate(new Date().toLocaleTimeString())

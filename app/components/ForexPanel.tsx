@@ -1,8 +1,8 @@
 'use client'
+import { BACKEND } from '@/lib/backend'
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 
-const API = process.env.NEXT_PUBLIC_API_URL
 
 // ── Meta ──────────────────────────────────────────────────────────────────────
 
@@ -160,7 +160,7 @@ export default function ForexPanel() {
   const load = useCallback(async () => {
     const results = await Promise.allSettled(
       ALL_SYMBOLS.map(sym =>
-        fetch(`${API}/v1/quote/${encodeURIComponent(sym)}`).then(r => r.json())
+        fetch(`${BACKEND}/v1/quote/${encodeURIComponent(sym)}`).then(r => r.json())
       )
     )
     const map = new Map<string, FxQuote>()

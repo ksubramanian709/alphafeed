@@ -1,11 +1,11 @@
 'use client'
+import { BACKEND } from '@/lib/backend'
 import { useEffect, useState } from 'react'
 import {
   ResponsiveContainer, AreaChart, Area,
   XAxis, YAxis, Tooltip, ReferenceLine,
 } from 'recharts'
 
-const API = process.env.NEXT_PUBLIC_API_URL
 
 interface Bar {
   timestampEpoch: number
@@ -122,7 +122,7 @@ export default function PriceChart({ symbol }: Props) {
     setSelected(rangeIdx)
     const { interval, range } = RANGES[rangeIdx]
     try {
-      const res  = await fetch(`${API}/v1/chart/${symbol}?interval=${interval}&range=${range}`)
+      const res  = await fetch(`${BACKEND}/v1/chart/${symbol}?interval=${interval}&range=${range}`)
       const json = await res.json()
       if (!json.data) return
       const bars: Bar[] = json.data

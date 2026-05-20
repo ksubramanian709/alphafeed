@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
+import { BACKEND } from '@/lib/backend'
 
 export async function GET(
   req: NextRequest,
@@ -9,7 +8,7 @@ export async function GET(
   const { symbol } = await params
   const form = req.nextUrl.searchParams.get('form') ?? '10-K'
   try {
-    const res = await fetch(`${API}/v1/research/${symbol.toUpperCase()}/filings?form=${form}&limit=5`, {
+    const res = await fetch(`${BACKEND}/v1/research/${symbol.toUpperCase()}/filings?form=${form}&limit=5`, {
       signal: AbortSignal.timeout(15000),
       next: { revalidate: 3600 },
     })

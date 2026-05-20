@@ -1,9 +1,9 @@
 'use client'
+import { BACKEND } from '@/lib/backend'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { searchTickers, type Ticker } from '../lib/tickers'
 
-const API    = process.env.NEXT_PUBLIC_API_URL ?? ''
-const WS_URL = API.replace(/^http/, 'ws') + '/v1/stream/quotes'
+const WS_URL = BACKEND.replace(/^http/, 'ws') + '/v1/stream/quotes'
 
 const DEFAULT_SYMBOLS  = ['AAPL', '^GSPC', '^VIX', 'GC=F', 'CL=F']
 const STORAGE_KEY      = 'alphafeed-watchlist'
@@ -78,7 +78,7 @@ export default function Watchlist() {
       setSymbols(syms)
       // REST seed — populate quotes immediately without waiting for WebSocket
       syms.forEach(sym => {
-        fetch(`${API}/v1/quote/${encodeURIComponent(sym)}`)
+        fetch(`${BACKEND}/v1/quote/${encodeURIComponent(sym)}`)
           .then(r => r.json())
           .then(j => { if (j?.data && !j.data.error) setQuotes(prev => ({ ...prev, [sym]: j.data })) })
           .catch(() => {})
@@ -167,7 +167,7 @@ export default function Watchlist() {
     setShowDrop(false)
     setSuggestions([])
     // REST seed for the new symbol
-    fetch(`${API}/v1/quote/${encodeURIComponent(sym)}`)
+    fetch(`${BACKEND}/v1/quote/${encodeURIComponent(sym)}`)
       .then(r => r.json())
       .then(j => { if (j?.data && !j.data.error) setQuotes(prev => ({ ...prev, [sym]: j.data })) })
       .catch(() => {})
@@ -231,7 +231,7 @@ export default function Watchlist() {
     if (symbols.length === 0 || briefingLoading) return
     setBriefingLoading(true)
     try {
-      const res  = await fetch(`${API}/v1/agent/briefing`, {
+      const res  = await fetch(`${BACKEND}/v1/agent/briefing`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ symbols }),

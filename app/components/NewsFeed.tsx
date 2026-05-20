@@ -1,7 +1,7 @@
 'use client'
+import { BACKEND } from '@/lib/backend'
 import { useEffect, useState } from 'react'
 
-const API = process.env.NEXT_PUBLIC_API_URL
 
 interface NewsItem {
   title: string
@@ -95,7 +95,7 @@ export default function NewsFeed({ symbol, limit = 12, title }: Props) {
 
     const url = symbol
       ? `/api/news/${encodeURIComponent(symbol)}`
-      : `${API}/v1/news`
+      : `${BACKEND}/v1/news`
 
     fetch(url, { signal: AbortSignal.timeout(15_000) })
       .then(r => r.json())

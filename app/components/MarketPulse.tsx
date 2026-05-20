@@ -1,8 +1,8 @@
 'use client'
+import { BACKEND } from '@/lib/backend'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
-const API = process.env.NEXT_PUBLIC_API_URL
 
 interface MarketItem {
   symbol: string
@@ -104,7 +104,7 @@ export default function MarketPulse() {
 
   async function load() {
     try {
-      const res  = await fetch(`${API}/v1/markets/overview`)
+      const res  = await fetch(`${BACKEND}/v1/markets/overview`)
       const json = await res.json()
       if (json.data) {
         setItems(json.data)

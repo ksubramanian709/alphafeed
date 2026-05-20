@@ -1,10 +1,9 @@
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
 
-// Server-side WebSocket URL — not exposed to browser, no CORS issue
-const BACKEND_WS = (
-  process.env.NEXT_PUBLIC_API_URL ?? 'https://alphafeed-api-iygv.onrender.com'
-).replace(/^http/, 'ws')
+import { BACKEND } from '@/lib/backend'
+
+const BACKEND_WS = BACKEND.replace(/^http/, 'ws')
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -56,7 +55,6 @@ export async function GET(request: Request) {
       }
 
       // Keep-alive: ping the backend WebSocket and send an SSE comment every 20s
-      // so Railway's proxy doesn't close the idle connection
       const keepAliveId = setInterval(() => {
         try {
           ws.send(JSON.stringify({ action: 'ping' }))

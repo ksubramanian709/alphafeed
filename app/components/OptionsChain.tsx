@@ -1,7 +1,7 @@
 'use client'
+import { BACKEND } from '@/lib/backend'
 import { useEffect, useState, useRef } from 'react'
 
-const API = process.env.NEXT_PUBLIC_API_URL
 
 interface Contract {
   contractSymbol: string
@@ -81,8 +81,8 @@ export default function OptionsChain({ symbol, underlyingPrice }: Props) {
     setError('')
     try {
       const url = expiration
-        ? `${API}/v1/options/${symbol}?expiration=${expiration}`
-        : `${API}/v1/options/${symbol}`
+        ? `${BACKEND}/v1/options/${symbol}?expiration=${expiration}`
+        : `${BACKEND}/v1/options/${symbol}`
       const res = await fetch(url)
       const json = await res.json()
       if (json.error || !json.data) {
@@ -246,7 +246,7 @@ export default function OptionsChain({ symbol, underlyingPrice }: Props) {
                 className="text-emerald-500 hover:underline">
                 developer.tradier.com
               </a>
-              , then set <code className="text-slate-400">TRADIER_API_KEY</code> on Railway.
+              , then set <code className="text-slate-400">TRADIER_API_KEY</code> on Render.
             </p>
           )}
         </div>

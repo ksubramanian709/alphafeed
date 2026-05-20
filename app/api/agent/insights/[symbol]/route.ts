@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { BACKEND } from '@/lib/backend'
 
 export const maxDuration = 45
-
-const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? 'https://alphafeed-api-iygv.onrender.com'
 
 export async function GET(
   req: NextRequest,

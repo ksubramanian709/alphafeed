@@ -1,7 +1,7 @@
 'use client'
+import { BACKEND } from '@/lib/backend'
 import { useEffect, useState } from 'react'
 
-const API = process.env.NEXT_PUBLIC_API_URL
 
 interface Fundamentals {
   symbol: string
@@ -133,7 +133,7 @@ export default function FundamentalsPanel({ symbol, currentPrice }: Props) {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`${API}/v1/fundamentals/${symbol}`)
+      const res = await fetch(`${BACKEND}/v1/fundamentals/${symbol}`)
       const json: Fundamentals = await res.json()
       if (json.error) {
         setError(json.error)

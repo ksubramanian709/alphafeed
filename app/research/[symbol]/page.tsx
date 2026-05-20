@@ -1,4 +1,5 @@
 'use client'
+import { BACKEND } from '@/lib/backend'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 
@@ -50,7 +51,7 @@ interface FilingInfo {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const API = process.env.NEXT_PUBLIC_API_URL
+
 
 function fmt(n: number, d = 2) { return n?.toFixed(d) ?? '—' }
 function fmtLarge(n: number) {
@@ -212,7 +213,7 @@ function EarningsTab({ symbol }: { symbol: string }) {
   const [loading, setLoading]   = useState(true)
 
   useEffect(() => {
-    fetch(`${API}/v1/earnings/${symbol}/history`)
+    fetch(`${BACKEND}/v1/earnings/${symbol}/history`)
       .then(r => r.json())
       .then(d => {
         const items: EarningsItem[] = (d.data?.quarterlyEarnings ?? []).slice(0, 8).map((q: any) => ({
@@ -658,7 +659,7 @@ export default function ResearchPage() {
 
   // Quote
   useEffect(() => {
-    fetch(`${API}/v1/quote/${symbol}`)
+    fetch(`${BACKEND}/v1/quote/${symbol}`)
       .then(r => r.json()).then(d => setQuote(d.data))
       .catch(() => {}).finally(() => setQL(false))
   }, [symbol])

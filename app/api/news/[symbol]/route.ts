@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-
-const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? 'https://alphafeed-api-iygv.onrender.com'
+import { BACKEND } from '@/lib/backend'
 
 export async function GET(
   _req: NextRequest,
