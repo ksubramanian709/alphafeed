@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const maxDuration = 45
 
-const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? 'https://market-feed-production.up.railway.app'
+const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? 'https://alphafeed-api-iygv.onrender.com'
 
 export async function GET(
   req: NextRequest,

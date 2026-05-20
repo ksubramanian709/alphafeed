@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 
 // Server-side WebSocket URL — not exposed to browser, no CORS issue
 const BACKEND_WS = (
-  process.env.NEXT_PUBLIC_API_URL ?? 'https://market-feed-production.up.railway.app'
+  process.env.NEXT_PUBLIC_API_URL ?? 'https://alphafeed-api-iygv.onrender.com'
 ).replace(/^http/, 'ws')
 
 export async function GET(request: Request) {
